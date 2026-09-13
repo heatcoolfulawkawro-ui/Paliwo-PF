@@ -90,6 +90,7 @@
   .stat-hero .label{font-size:.72rem; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.05em;}
   .stat-hero .value{font-family:var(--font-mono); font-size:1.7rem; font-weight:600; line-height:1;}
   .stat-hero .value.amber{color:var(--amber);}
+  .stat-hero .value.green{color:var(--green);}
   .stat-hero .unit{font-size:.85rem; color:var(--ink-dim); font-weight:500;}
 
   .grid-summary{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
@@ -426,23 +427,21 @@ function intervalsFor(vehicleId){
   });
 }
 
-function avgConsumption(vehicleId){
-  const ivs = intervalsFor(vehicleId).filter(iv=>!iv.isBaseline && iv.distance>0);
-  if(!ivs.length) return null;
-  const liters = ivs.reduce((s,iv)=>s+iv.fillup.liters,0);
-  const dist = ivs.reduce((s,iv)=>s+iv.distance,0);
-  return dist>0 ? liters/dist*100 : null;
-}
-
-function monthSummary(vehicleId, mKey){
-  const ivs = intervalsFor(vehicleId).filter(iv=>monthKey(iv.fillup.date)===mKey);
+// predicate(dateISO) decyduje które wpisy wchodzą do podsumowania -- pozwala
+// tą samą logiką liczyć miesiąc, rok albo "od początku" (lifetime).
+function periodSummary(vehicleId, predicate){
+  const ivs = intervalsFor(vehicleId).filter(iv=>predicate(iv.fillup.date));
   const distance = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.distance,0);
   const litersUsed = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.fillup.liters,0);
-  const fuelCost = state.fillups.filter(f=>f.vehicleId===vehicleId && monthKey(f.date)===mKey).reduce((s,f)=>s+f.totalCost,0);
-  const otherCost = costsFor(vehicleId).filter(c=>monthKey(c.date)===mKey).reduce((s,c)=>s+c.amount,0);
+  const fuelCost = state.fillups.filter(f=>f.vehicleId===vehicleId && predicate(f.date)).reduce((s,f)=>s+f.totalCost,0);
+  const otherCost = costsFor(vehicleId).filter(c=>predicate(c.date)).reduce((s,c)=>s+c.amount,0);
   const consumption = distance>0 ? litersUsed/distance*100 : null;
-  return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption };
+  const costPer100 = distance>0 ? (fuelCost+otherCost)/distance*100 : null;
+  return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption, costPer100 };
 }
+function monthSummary(vehicleId, mKey){ return periodSummary(vehicleId, d=>monthKey(d)===mKey); }
+function yearSummary(vehicleId, year){ return periodSummary(vehicleId, d=>d.slice(0,4)===String(year)); }
+function lifetimeSummary(vehicleId){ return periodSummary(vehicleId, ()=>true); }
 
 function isoWeekLabel(iso){
   const [y,m,d] = iso.split('-').map(Number);
@@ -511,7 +510,8 @@ function renderVehicle(vehicleId){
   if(!uiState[vehicleId]) uiState[vehicleId] = { month: monthKey(todayISO()), period:'dzien' };
   const ui = uiState[vehicleId];
   const ms = monthSummary(vehicleId, ui.month);
-  const avg = avgConsumption(vehicleId);
+  const life = lifetimeSummary(vehicleId);
+  const avg = life.consumption;
 
   let html = `
     <div class="vehicle-head">
@@ -524,6 +524,8 @@ function renderVehicle(vehicleId){
     <div class="hero">
       <div class="stat-hero"><span class="label">Dni od tankowania</span><span class="value amber">${daysSince===null?'—':daysSince}${daysSince===null?'':'<span class="unit"> dni</span>'}</span></div>
       <div class="stat-hero"><span class="label">Aktualny przebieg</span><span class="value mono">${last?n(last.odo,0):'—'}${last?'<span class="unit"> km</span>':''}</span></div>
+      <div class="stat-hero"><span class="label">Śr. koszt / 100 km (od początku)</span><span class="value mono">${life.costPer100===null?'—':n(life.costPer100,0)}${life.costPer100===null?'':'<span class="unit"> zł</span>'}</span></div>
+      <div class="stat-hero"><span class="label">Śr. spalanie (od początku)</span><span class="value mono green">${life.consumption===null?'—':n(life.consumption,2)}${life.consumption===null?'':'<span class="unit"> l/100km</span>'}</span></div>
     </div>
 
     <div class="section">
@@ -606,43 +608,61 @@ function renderCostEntry(c){
     </div>`;
 }
 
-function renderFleet(){
-  if(state.vehicles.length===0) return '<div class="empty-state" style="margin-top:16px;">Brak pojazdów — dodaj pierwszy w zakładce "+ Dodaj auto"</div>';
-  const mKey = monthKey(todayISO());
+function renderFleetPeriodBlock(title, summaryFn, extraHeadHtml){
   let sumDist=0, sumLiters=0, sumFuel=0, sumOther=0;
   let cards = '';
   state.vehicles.forEach(v=>{
-    const ms = monthSummary(v.id, mKey);
-    sumDist+=ms.distance; sumLiters+=ms.litersUsed; sumFuel+=ms.fuelCost; sumOther+=ms.otherCost;
+    const s = summaryFn(v);
+    sumDist+=s.distance; sumLiters+=s.litersUsed; sumFuel+=s.fuelCost; sumOther+=s.otherCost;
     cards += `
       <div class="fleet-card">
         <div class="fc-top">
           <div class="fc-name">🚐 ${esc(v.name)}</div>
-          <span class="cat-pill">${ms.consumption===null?'—':n(ms.consumption,2)+' l/100'}</span>
+          <span class="cat-pill">${s.consumption===null?'—':n(s.consumption,2)+' l/100'}</span>
         </div>
         <div class="fc-metrics">
-          <div><div class="fm-label">Km</div><div class="fm-value">${n(ms.distance,0)}</div></div>
-          <div><div class="fm-label">Paliwo</div><div class="fm-value">${n(ms.litersUsed,1)} l</div></div>
-          <div><div class="fm-label">Paliwo zł</div><div class="fm-value">${n(ms.fuelCost,0)}</div></div>
-          <div><div class="fm-label">Łącznie</div><div class="fm-value">${n(ms.total,0)}</div></div>
+          <div><div class="fm-label">Km</div><div class="fm-value">${n(s.distance,0)}</div></div>
+          <div><div class="fm-label">Paliwo</div><div class="fm-value">${n(s.litersUsed,1)} l</div></div>
+          <div><div class="fm-label">Koszt/100km</div><div class="fm-value">${s.costPer100===null?'—':n(s.costPer100,0)+' zł'}</div></div>
+          <div><div class="fm-label">Łącznie</div><div class="fm-value">${n(s.total,0)} zł</div></div>
         </div>
       </div>`;
   });
-  const fleetAvg = sumDist>0 ? sumLiters/sumDist*100 : null;
+  const fleetAvgCons = sumDist>0 ? sumLiters/sumDist*100 : null;
+  const fleetAvgCost = sumDist>0 ? (sumFuel+sumOther)/sumDist*100 : null;
   return `
-    <div class="section" style="margin-top:14px;">
-      <div class="section-head"><h2>Zestawienie floty — ${fmtMonth(mKey)}</h2></div>
-      ${cards}
+    <div class="section">
+      <div class="section-head"><h2>${title}</h2>${extraHeadHtml||''}</div>
+      ${state.vehicles.length===0 ? '<div class="empty-state">Brak pojazdów</div>' : cards}
       <div class="fleet-total">
         <h3>Cała flota</h3>
         <div class="grid-summary">
           <div class="tile"><div class="t-label">Suma km</div><div class="t-value">${n(sumDist,0)}</div></div>
           <div class="tile"><div class="t-label">Suma paliwa</div><div class="t-value">${n(sumLiters,1)} l</div></div>
-          <div class="tile"><div class="t-label">Śr. spalanie floty</div><div class="t-value green">${fleetAvg===null?'—':n(fleetAvg,2)+' l/100km'}</div></div>
+          <div class="tile"><div class="t-label">Śr. spalanie floty</div><div class="t-value green">${fleetAvgCons===null?'—':n(fleetAvgCons,2)+' l/100km'}</div></div>
+          <div class="tile"><div class="t-label">Śr. koszt/100km</div><div class="t-value">${fleetAvgCost===null?'—':n(fleetAvgCost,0)+' zł'}</div></div>
           <div class="tile"><div class="t-label">Koszt łączny</div><div class="t-value red">${n(sumFuel+sumOther,0)} zł</div></div>
         </div>
       </div>
     </div>`;
+}
+
+function renderFleet(){
+  if(!uiState.__fleet) uiState.__fleet = { month: monthKey(todayISO()) };
+  const fUi = uiState.__fleet;
+  const year = fUi.month.slice(0,4);
+  const monthNav = `<div class="month-switch"><button onclick="shiftFleetMonth(-1)">‹</button><button onclick="shiftFleetMonth(1)">›</button></div>`;
+  let html = '<div style="margin-top:14px;"></div>';
+  html += renderFleetPeriodBlock('Miesiąc — ' + fmtMonth(fUi.month), v=>monthSummary(v.id, fUi.month), monthNav);
+  html += renderFleetPeriodBlock('Rok ' + year + ' — narastająco', v=>yearSummary(v.id, year));
+  return html;
+}
+function shiftFleetMonth(dir){
+  const ui = uiState.__fleet;
+  let [y,m] = ui.month.split('-').map(Number);
+  m += dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  ui.month = `${y}-${pad(m)}`;
+  renderContent();
 }
 
 function renderAddVehicle(){
