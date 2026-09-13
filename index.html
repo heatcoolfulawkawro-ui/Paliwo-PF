@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <script>
 // Skróty na ekranie głównym telefonu potrafią pokazywać zbuforowaną,
 // starą wersję strony. Ten kod po cichu sprawdza w tle prawdziwą
@@ -752,6 +752,7 @@ function resetFillupSheet(){
   document.querySelector('#overlay .btn-save').textContent = 'Zapisz tankowanie';
   closeLightbox();
   ['A','B'].forEach(t=>{
+    if(ocrControllers[t]) ocrControllers[t].abort();
     document.getElementById('photoReview'+t).classList.remove('show');
     document.getElementById('photoImg'+t).src='';
     document.getElementById('scanZone'+t).classList.remove('busy');
@@ -882,9 +883,12 @@ function deleteCost(id){
 // target 'A' = zdjęcie dystrybutora (litry/cena/koszt), 'B' = zdjęcie licznika (przebieg)
 function setLightboxStatus(html){ document.getElementById('lightboxStatus').innerHTML = html; }
 
+const ocrControllers = { A:null, B:null };
+
 function onPhotoPicked(evt, target){
   const file = evt.target.files[0];
   if(!file) return;
+  if(ocrControllers[target]) ocrControllers[target].abort();
   const url = URL.createObjectURL(file);
   document.getElementById('photoImg'+target).src = url;
   document.getElementById('photoReview'+target).classList.add('show');
@@ -918,6 +922,10 @@ function onPhotoPicked(evt, target){
     setLightboxStatus('');
   };
 
+  const controller = new AbortController();
+  ocrControllers[target] = controller;
+  const giveUpTimer = setTimeout(()=>controller.abort('timeout'), 30000);
+
   const reader = new FileReader();
   reader.onload = async () => {
     const dataUrl = reader.result;
@@ -926,9 +934,11 @@ function onPhotoPicked(evt, target){
       const res = await fetch(GAS_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType:file.type, dataBase64:base64 })
+        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType:file.type, dataBase64:base64 }),
+        signal: controller.signal
       });
       const json = await res.json();
+      clearTimeout(giveUpTimer);
       finishBusy();
       zoneLabel.textContent = 'Wybierz inne zdjęcie';
       if(json.ok && json.data){
@@ -938,9 +948,11 @@ function onPhotoPicked(evt, target){
         showToast('Nie udało się odczytać zdjęcia: ' + (json.error||'nieznany błąd'), true);
       }
     }catch(e){
+      clearTimeout(giveUpTimer);
+      if(e.name==='AbortError' && controller.signal.reason!=='timeout') return; // zastąpione nowszym wyborem zdjęcia
       finishBusy();
       zoneLabel.textContent = defaultLabel;
-      showToast('Błąd połączenia z serwerem odczytu', true);
+      showToast(e.name==='AbortError' ? 'Odczyt trwał zbyt długo — spróbuj ponownie' : 'Błąd połączenia z serwerem odczytu', true);
     }
   };
   reader.readAsDataURL(file);
@@ -1000,12 +1012,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   stage.addEventListener('touchstart', e=>{
     if(!lightboxTarget) return;
     if(e.touches.length===2){
+      e.preventDefault(); // dodatkowa blokada natywnego pinch-zoomu strony, poza meta viewport
       pzDrag.startDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
       pzDrag.startScale = currentPz().scale;
     } else if(e.touches.length===1){
       pzDrag.dragging=true; pzDrag.lastX=e.touches[0].clientX; pzDrag.lastY=e.touches[0].clientY;
     }
-  }, {passive:true});
+  }, {passive:false});
   stage.addEventListener('touchmove', e=>{
     if(!lightboxTarget) return;
     e.preventDefault();
@@ -1041,6 +1054,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
   document.getElementById('overlay-koszt').addEventListener('click', e=>{ if(e.target.id==='overlay-koszt') closeCostSheet(); });
+
+  // Zabezpieczenie: gdyby mimo blokady w meta viewport przeglądarka i tak
+  // natywnie przybliżyła stronę, ta funkcja trzyma pasek "✕ Gotowe" przypięty
+  // do realnie widocznego obszaru ekranu, żeby zawsze dało się wyjść z podglądu.
+  if(window.visualViewport){
+    const topBar = document.querySelector('.lightbox-top');
+    const pin = () => {
+      topBar.style.position = 'fixed';
+      topBar.style.top = window.visualViewport.offsetTop + 'px';
+      topBar.style.left = window.visualViewport.offsetLeft + 'px';
+      topBar.style.width = window.visualViewport.width + 'px';
+    };
+    window.visualViewport.addEventListener('resize', pin);
+    window.visualViewport.addEventListener('scroll', pin);
+    pin();
+  }
 
   render();
   loadRemoteOnStart();
