@@ -20,6 +20,7 @@
   }catch(e){}
 })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <title>Paliwo PF</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
@@ -712,17 +713,27 @@ function renderChart(vehicleId, period){
     <div class="chart-legend"><span><i style="background:var(--amber)"></i>Spalanie l/100km</span><span><i style="background:var(--blue)"></i>Koszt zł/100km</span></div>`;
 }
 
+// Każda seria dostaje własną skalę dopasowaną TYLKO do jej realnego zakresu
+// (bez sztucznego wymuszania zera jako minimum) -- inaczej dwie serie o
+// zupełnie różnych jednostkach (l/100km vs zł/100km) wizualnie "nakładają
+// się" 1:1, bo obie są ściśnięte pod tą samą, niepotrzebnie szeroką skalę.
+function niceRange(values){
+  const max = Math.max(...values), min = Math.min(...values);
+  const span = max - min;
+  const pad = span > 0 ? span*0.18 : Math.max(Math.abs(max)*0.1, 0.5);
+  return { min: min-pad, max: max+pad };
+}
+
 function drawChart(svgId, d){
   const svg = document.getElementById(svgId);
   if(!svg) return;
   const W=300,H=130,padL=28,padR=8,padT=10,padB=20;
   const spalanie = d.map(p=>p.consumption), koszt = d.map(p=>p.costPer100);
-  const sMax = Math.max(...spalanie)+0.6, sMin = Math.min(0,Math.min(...spalanie)-0.6);
-  const kMax = Math.max(...koszt)+8, kMin = Math.min(0,Math.min(...koszt)-8);
+  const sR = niceRange(spalanie), kR = niceRange(koszt);
   const nPts = d.length;
   const x = i => padL + (W-padL-padR) * (nPts===1?0:(i/(nPts-1)));
-  const ys = v => padT + (H-padT-padB) * (1 - (v-sMin)/(sMax-sMin));
-  const yk = v => padT + (H-padT-padB) * (1 - (v-kMin)/(kMax-kMin));
+  const ys = v => padT + (H-padT-padB) * (1 - (v-sR.min)/(sR.max-sR.min));
+  const yk = v => padT + (H-padT-padB) * (1 - (v-kR.min)/(kR.max-kR.min));
 
   let svgHtml = '';
   [0,0.5,1].forEach(f=>{ const gy = padT + (H-padT-padB)*f; svgHtml += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#2c3841" stroke-width="1"/>`; });
@@ -734,6 +745,7 @@ function drawChart(svgId, d){
   spalanie.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${ys(v)}" r="${i===nPts-1?3.6:2.4}" fill="#e8a33d"/>`; });
   koszt.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${yk(v)}" r="${i===nPts-1?3.2:2}" fill="#5b9bd5"/>`; });
   svgHtml += `<text x="${x(nPts-1)-2}" y="${ys(spalanie[nPts-1])-8}" font-size="9" fill="#e8a33d" font-family="JetBrains Mono" text-anchor="end">${spalanie[nPts-1].toFixed(2)}</text>`;
+  svgHtml += `<text x="${x(nPts-1)-2}" y="${yk(koszt[nPts-1])-8}" font-size="9" fill="#5b9bd5" font-family="JetBrains Mono" text-anchor="end">${koszt[nPts-1].toFixed(0)}</text>`;
   d.forEach((p,i)=>{ svgHtml += `<text x="${x(i)}" y="${H-4}" font-size="8" fill="#8fa0ab" font-family="Public Sans" text-anchor="middle">${esc(p.label)}</text>`; });
   svg.innerHTML = svgHtml;
 }
@@ -773,16 +785,35 @@ function renameVehicle(vehicleId){
   v.name = trimmed;
   saveState(); render();
 }
+function exportVehicleBackup(vehicleId){
+  const v = vehicleById(vehicleId);
+  const fRows = [['Data','Przebieg (km)','Litry','Cena/l (zł)','Koszt (zł)']]
+    .concat(fillupsFor(vehicleId).map(f=>[f.date, f.odo, f.liters, f.pricePerLiter, f.totalCost]));
+  const cRows = [['Data','Przebieg (km)','Kategoria','Kwota (zł)','Notatka']]
+    .concat(costsFor(vehicleId).map(c=>[c.date, c.odo, c.category, c.amount, c.note||'']));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fRows), 'Tankowania');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cRows), 'Koszty');
+  const safeName = v.name.replace(/[^\w\-]+/g,'_');
+  XLSX.writeFile(wb, `Paliwo-PF_${safeName}_${todayISO()}.xlsx`);
+}
+
 function deleteVehicle(vehicleId){
   const v = vehicleById(vehicleId);
-  if(!confirm(`Usunąć pojazd "${v.name}" wraz z całą jego historią tankowań i kosztów? Tej operacji nie da się cofnąć.`)) return;
+  // Usunięcie całego pojazdu kasuje bezpowrotnie CAŁĄ jego historię, więc
+  // wymagamy dwóch osobnych potwierdzeń i wymuszamy zapis kopii zapasowej
+  // (Excel) na telefon, zanim dane znikną.
+  if(!confirm(`Usunąć pojazd "${v.name}" wraz z całą jego historią tankowań i kosztów?`)) return;
+  if(!confirm(`To nieodwracalne. Na pewno na pewno usunąć "${v.name}"?`)) return;
+  exportVehicleBackup(vehicleId);
+  alert(`Zapisano kopię zapasową danych pojazdu "${v.name}" jako plik Excel (sprawdź Pobrane / Pliki na telefonie). Teraz usuwam pojazd z aplikacji.`);
   state.vehicles = state.vehicles.filter(x=>x.id!==vehicleId);
   state.fillups = state.fillups.filter(f=>f.vehicleId!==vehicleId);
   state.costs = state.costs.filter(c=>c.vehicleId!==vehicleId);
   delete uiState[vehicleId];
   activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
   saveState(); render();
-  showToast('Usunięto pojazd');
+  showToast('Usunięto pojazd (kopia zapasowa zapisana na telefonie)');
 }
 
 /* ====================== FORMULARZ TANKOWANIA ====================== */
