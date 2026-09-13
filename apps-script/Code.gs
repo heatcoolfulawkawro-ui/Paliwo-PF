@@ -68,25 +68,39 @@ function handleOcr(body) {
     generationConfig: { temperature: 0, responseMimeType: 'application/json' }
   };
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey;
-  try {
-    const res = UrlFetchApp.fetch(url, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-    const status = res.getResponseCode();
-    const resJson = JSON.parse(res.getContentText());
-    if (status !== 200) {
-      return jsonOut({ ok: false, error: 'Gemini API: ' + (resJson.error ? resJson.error.message : status) });
+  // "gemini-flash-latest" to ruchomy alias Google, zawsze wskazujący aktualny
+  // zalecany model flash -- dzięki temu nie trzeba wracać do tego kodu przy
+  // każdej zmianie nazwy/wersji modelu przez Google. Reszta listy to zapasowe
+  // nazwy na wypadek gdyby alias przestał działać.
+  const models = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+  const cached = PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL_OK');
+  if (cached && models.indexOf(cached) === -1) models.unshift(cached);
+
+  let lastError = 'nieznany błąd';
+  for (let i = 0; i < models.length; i++) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent?key=' + apiKey;
+    try {
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+      const status = res.getResponseCode();
+      const resJson = JSON.parse(res.getContentText());
+      if (status !== 200) {
+        lastError = 'model ' + models[i] + ': ' + (resJson.error ? resJson.error.message : status);
+        continue;
+      }
+      PropertiesService.getScriptProperties().setProperty('GEMINI_MODEL_OK', models[i]);
+      const text = resJson.candidates[0].content.parts[0].text;
+      const data = JSON.parse(text);
+      return jsonOut({ ok: true, data: data, model: models[i] });
+    } catch (err) {
+      lastError = 'model ' + models[i] + ': ' + err.message;
     }
-    const text = resJson.candidates[0].content.parts[0].text;
-    const data = JSON.parse(text);
-    return jsonOut({ ok: true, data: data });
-  } catch (err) {
-    return jsonOut({ ok: false, error: 'Błąd odczytu zdjęcia: ' + err.message });
   }
+  return jsonOut({ ok: false, error: 'Gemini API: ' + lastError });
 }
 
 function jsonOut(obj) {
