@@ -8,13 +8,27 @@
 // starą wersję strony. Ten kod po cichu sprawdza w tle prawdziwą
 // aktualną wersję na serwerze (z pominięciem cache przeglądarki) i
 // odświeża stronę automatycznie, jeśli wykryje nowszą.
+function paliwoPfFormatVersion(raw){
+  var d = new Date(raw);
+  if(isNaN(d.getTime())) return raw;
+  function pad(n){ return String(n).padStart(2,'0'); }
+  return pad(d.getDate())+'.'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function paliwoPfShowVersion(v){
+  window.__paliwoPfVersion = v;
+  var el = document.getElementById('pageVersion');
+  if(el) el.textContent = 'wersja strony: ' + paliwoPfFormatVersion(v);
+}
 (function(){
+  var cached = localStorage.getItem('paliwopf_page_version');
+  if(cached) paliwoPfShowVersion(cached);
   try{
     fetch(location.pathname, { method:'HEAD', cache:'no-store' }).then(function(res){
       var v = res.headers.get('last-modified') || res.headers.get('etag');
       if(!v) return;
       var stored = localStorage.getItem('paliwopf_page_version');
       localStorage.setItem('paliwopf_page_version', v);
+      paliwoPfShowVersion(v);
       // GitHub Pages każe przeglądarce trzymać stronę w cache przez 10 minut
       // (Cache-Control: max-age=600) -- zwykłe location.reload() czasem po
       // prostu pokazuje tę samą, zbuforowaną kopię. Doklejenie unikalnego
@@ -61,6 +75,7 @@
   .sync.ok .dot{background:var(--green);}
   .sync.local .dot{background:var(--amber);}
   .sync.err .dot{background:var(--red);}
+  .page-version{font-size:.65rem; color:var(--ink-dim); opacity:.7; margin:-6px 0 10px; cursor:pointer;}
 
   .tabs{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
   .tabs::-webkit-scrollbar{display:none;}
@@ -235,6 +250,7 @@
     <span class="sub">RA-STER · dziennik tankowań</span>
     <span class="sync local" id="syncIndicator"><span class="dot"></span><span id="syncText">lokalnie</span></span>
   </div>
+  <div class="page-version" id="pageVersion" onclick="location.replace(location.pathname + '?v=' + Date.now())" title="Stuknij, żeby wymusić pobranie najnowszej wersji">wersja strony: —</div>
   <div class="tabs" id="tabs"></div>
 </div>
 
@@ -1226,6 +1242,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     pin();
   }
 
+  if(window.__paliwoPfVersion) paliwoPfShowVersion(window.__paliwoPfVersion);
   render();
   loadRemoteOnStart();
 });
