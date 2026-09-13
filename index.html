@@ -15,7 +15,11 @@
       if(!v) return;
       var stored = localStorage.getItem('paliwopf_page_version');
       localStorage.setItem('paliwopf_page_version', v);
-      if(stored && stored !== v) location.reload();
+      // GitHub Pages każe przeglądarce trzymać stronę w cache przez 10 minut
+      // (Cache-Control: max-age=600) -- zwykłe location.reload() czasem po
+      // prostu pokazuje tę samą, zbuforowaną kopię. Doklejenie unikalnego
+      // parametru do adresu wymusza prawdziwe pobranie z sieci.
+      if(stored && stored !== v) location.replace(location.pathname + '?v=' + Date.now());
     }).catch(function(){});
   }catch(e){}
 })();
