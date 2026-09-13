@@ -91,6 +91,13 @@
   .stat-hero .value{font-family:var(--font-mono); font-size:1.7rem; font-weight:600; line-height:1;}
   .stat-hero .value.amber{color:var(--amber);}
   .stat-hero .value.green{color:var(--green);}
+
+  .cost-switch{display:flex; align-items:center; gap:6px; margin-top:8px; cursor:pointer; user-select:none;}
+  .cost-switch-label{font-size:.62rem; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.03em;}
+  .cost-switch-label.active{color:var(--ink); font-weight:700;}
+  .cost-switch-track{width:34px; height:18px; border-radius:999px; background:var(--panel2); border:1px solid var(--line); position:relative; flex:0 0 auto;}
+  .cost-switch-thumb{position:absolute; top:1px; left:1px; width:14px; height:14px; border-radius:50%; background:var(--amber); transition:transform .15s;}
+  .cost-switch-thumb.right{transform:translateX(16px);}
   .stat-hero .unit{font-size:.85rem; color:var(--ink-dim); font-weight:500;}
 
   .grid-summary{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
@@ -437,7 +444,8 @@ function periodSummary(vehicleId, predicate){
   const otherCost = costsFor(vehicleId).filter(c=>predicate(c.date)).reduce((s,c)=>s+c.amount,0);
   const consumption = distance>0 ? litersUsed/distance*100 : null;
   const costPer100 = distance>0 ? (fuelCost+otherCost)/distance*100 : null;
-  return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption, costPer100 };
+  const fuelCostPer100 = distance>0 ? fuelCost/distance*100 : null;
+  return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption, costPer100, fuelCostPer100 };
 }
 function monthSummary(vehicleId, mKey){ return periodSummary(vehicleId, d=>monthKey(d)===mKey); }
 function yearSummary(vehicleId, year){ return periodSummary(vehicleId, d=>d.slice(0,4)===String(year)); }
@@ -509,9 +517,11 @@ function renderVehicle(vehicleId){
 
   if(!uiState[vehicleId]) uiState[vehicleId] = { month: monthKey(todayISO()), period:'dzien' };
   const ui = uiState[vehicleId];
+  if(!ui.costMode) ui.costMode = 'total';
   const ms = monthSummary(vehicleId, ui.month);
   const life = lifetimeSummary(vehicleId);
   const avg = life.consumption;
+  const lifeCostShown = ui.costMode==='paliwo' ? life.fuelCostPer100 : life.costPer100;
 
   let html = `
     <div class="vehicle-head">
@@ -524,7 +534,15 @@ function renderVehicle(vehicleId){
     <div class="hero">
       <div class="stat-hero"><span class="label">Dni od tankowania</span><span class="value amber">${daysSince===null?'—':daysSince}${daysSince===null?'':'<span class="unit"> dni</span>'}</span></div>
       <div class="stat-hero"><span class="label">Aktualny przebieg</span><span class="value mono">${last?n(last.odo,0):'—'}${last?'<span class="unit"> km</span>':''}</span></div>
-      <div class="stat-hero"><span class="label">Śr. koszt / 100 km (od początku)</span><span class="value mono">${life.costPer100===null?'—':n(life.costPer100,0)}${life.costPer100===null?'':'<span class="unit"> zł</span>'}</span></div>
+      <div class="stat-hero">
+        <span class="label">Śr. koszt / 100 km (od początku)</span>
+        <span class="value mono">${lifeCostShown===null?'—':n(lifeCostShown,0)}${lifeCostShown===null?'':'<span class="unit"> zł</span>'}</span>
+        <div class="cost-switch" onclick="toggleCostMode('${vehicleId}')">
+          <span class="cost-switch-label ${ui.costMode==='paliwo'?'active':''}">Paliwo</span>
+          <span class="cost-switch-track"><span class="cost-switch-thumb ${ui.costMode==='total'?'right':''}"></span></span>
+          <span class="cost-switch-label ${ui.costMode==='total'?'active':''}">Całkowity</span>
+        </div>
+      </div>
       <div class="stat-hero"><span class="label">Śr. spalanie (od początku)</span><span class="value mono green">${life.consumption===null?'—':n(life.consumption,2)}${life.consumption===null?'':'<span class="unit"> l/100km</span>'}</span></div>
     </div>
 
@@ -720,6 +738,11 @@ function shiftMonth(vehicleId, dir){
   renderContent();
 }
 function setPeriod(vehicleId, period){ uiState[vehicleId].period = period; renderContent(); }
+function toggleCostMode(vehicleId){
+  const ui = uiState[vehicleId];
+  ui.costMode = ui.costMode==='paliwo' ? 'total' : 'paliwo';
+  renderContent();
+}
 
 /* ====================== ZARZĄDZANIE POJAZDAMI ====================== */
 function addVehicle(){
