@@ -211,26 +211,43 @@
 
 <button class="fab" id="fab" onclick="openFillupSheet()">+</button>
 
-<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="onPhotoPicked(event)">
+<input type="file" id="photoInputA" accept="image/*" style="display:none" onchange="onPhotoPicked(event,'A')">
+<input type="file" id="photoInputB" accept="image/*" style="display:none" onchange="onPhotoPicked(event,'B')">
 
 <div class="overlay" id="overlay">
   <div class="sheet">
     <h3 id="sheet-title">Nowe tankowanie</h3>
-    <div class="scan-zone" id="scanZone" onclick="document.getElementById('photoInput').click()">
-      <span class="icon">📷</span>
-      <div class="txt"><b id="scanZoneLabel">Wybierz zdjęcie paragonu / licznika</b><span>Z galerii — pola poniżej wypełnią się same, do sprawdzenia przed zapisem</span></div>
+
+    <div class="field" id="fld-data"><label for="f-data">Data</label><input id="f-data" type="date"></div>
+
+    <div class="scan-zone" id="scanZoneB" onclick="document.getElementById('photoInputB').click()">
+      <span class="icon">📏</span>
+      <div class="txt"><b id="scanZoneLabelB">Zdjęcie licznika (przebieg)</b><span>Z galerii — uzupełni pole "Przebieg" poniżej</span></div>
     </div>
-    <div class="photo-review" id="photoReview">
+    <div class="photo-review" id="photoReviewB" data-target="B">
       <span class="verify-badge">Porównaj ze zdjęciem →</span>
-      <img id="photoImg" src="" alt="Podgląd zdjęcia paragonu">
+      <img id="photoImgB" src="" alt="Podgląd zdjęcia licznika">
       <div class="zoom-ctrl">
-        <button type="button" onclick="zoomBy(-0.3)">−</button>
-        <button type="button" onclick="zoomBy(0.3)">+</button>
-        <button type="button" onclick="zoomReset()">⟲</button>
+        <button type="button" onclick="zoomBy('B',-0.3)">−</button>
+        <button type="button" onclick="zoomBy('B',0.3)">+</button>
+        <button type="button" onclick="zoomReset('B')">⟲</button>
       </div>
     </div>
-    <div class="field" id="fld-data"><label for="f-data">Data</label><input id="f-data" type="date"></div>
     <div class="field" id="fld-przebieg"><label for="f-przebieg">Przebieg (km)</label><input id="f-przebieg" type="number" placeholder="np. 347560"></div>
+
+    <div class="scan-zone" id="scanZoneA" onclick="document.getElementById('photoInputA').click()">
+      <span class="icon">📷</span>
+      <div class="txt"><b id="scanZoneLabelA">Zdjęcie dystrybutora (litry, cena, koszt)</b><span>Z galerii — uzupełni pola paliwa poniżej</span></div>
+    </div>
+    <div class="photo-review" id="photoReviewA" data-target="A">
+      <span class="verify-badge">Porównaj ze zdjęciem →</span>
+      <img id="photoImgA" src="" alt="Podgląd zdjęcia dystrybutora">
+      <div class="zoom-ctrl">
+        <button type="button" onclick="zoomBy('A',-0.3)">−</button>
+        <button type="button" onclick="zoomBy('A',0.3)">+</button>
+        <button type="button" onclick="zoomReset('A')">⟲</button>
+      </div>
+    </div>
     <div class="row2">
       <div class="field" id="fld-litry"><label for="f-litry">Paliwo (l)</label><input id="f-litry" type="number" step="0.01" placeholder="np. 70,20" oninput="calcFromLitryCena()"></div>
       <div class="field" id="fld-cena"><label for="f-cena">Cena / l</label><input id="f-cena" type="number" step="0.01" placeholder="np. 8,30" oninput="calcFromLitryCena()"></div>
@@ -716,9 +733,12 @@ function resetFillupSheet(){
   editingFillupId = null;
   document.getElementById('sheet-title').textContent = 'Nowe tankowanie — ' + (vehicleById(activeTab)?.name||'');
   document.querySelector('#overlay .btn-save').textContent = 'Zapisz tankowanie';
-  document.getElementById('photoReview').classList.remove('show');
-  document.getElementById('photoImg').src='';
-  document.getElementById('scanZoneLabel').textContent = 'Wybierz zdjęcie paragonu / licznika';
+  ['A','B'].forEach(t=>{
+    document.getElementById('photoReview'+t).classList.remove('show');
+    document.getElementById('photoImg'+t).src='';
+  });
+  document.getElementById('scanZoneLabelA').textContent = 'Zdjęcie dystrybutora (litry, cena, koszt)';
+  document.getElementById('scanZoneLabelB').textContent = 'Zdjęcie licznika (przebieg)';
   ['fld-litry','fld-cena','fld-koszt','fld-przebieg'].forEach(id=>{
     const f = document.getElementById(id);
     f.classList.remove('autofilled');
@@ -837,20 +857,23 @@ function deleteCost(id){
 }
 
 /* ====================== SKANOWANIE ZDJĘCIA (Gemini przez Apps Script) ====================== */
-function onPhotoPicked(evt){
+// target 'A' = zdjęcie dystrybutora (litry/cena/koszt), 'B' = zdjęcie licznika (przebieg)
+function onPhotoPicked(evt, target){
   const file = evt.target.files[0];
   if(!file) return;
   const url = URL.createObjectURL(file);
-  document.getElementById('photoImg').src = url;
-  document.getElementById('photoReview').classList.add('show');
-  zoomReset();
+  document.getElementById('photoImg'+target).src = url;
+  document.getElementById('photoReview'+target).classList.add('show');
+  zoomReset(target);
+
+  const zoneLabel = document.getElementById('scanZoneLabel'+target);
+  const defaultLabel = target==='B' ? 'Zdjęcie licznika (przebieg)' : 'Zdjęcie dystrybutora (litry, cena, koszt)';
 
   if(!GAS_URL){
     showToast('Backend jeszcze niepodłączony (GAS_URL) — nie mogę odczytać zdjęcia. Uzupełnij pola ręcznie.', true);
     return;
   }
-  const zoneLabel = document.getElementById('scanZoneLabel');
-  document.getElementById('scanZone').classList.add('busy');
+  document.getElementById('scanZone'+target).classList.add('busy');
   zoneLabel.textContent = 'Odczytuję zdjęcie (Gemini)...';
 
   const reader = new FileReader();
@@ -861,10 +884,10 @@ function onPhotoPicked(evt){
       const res = await fetch(GAS_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ action:'ocr', mimeType:file.type, dataBase64:base64 })
+        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType:file.type, dataBase64:base64 })
       });
       const json = await res.json();
-      document.getElementById('scanZone').classList.remove('busy');
+      document.getElementById('scanZone'+target).classList.remove('busy');
       zoneLabel.textContent = 'Wybierz inne zdjęcie';
       if(json.ok && json.data){
         applyOcrData(json.data);
@@ -873,8 +896,8 @@ function onPhotoPicked(evt){
         showToast('Nie udało się odczytać zdjęcia: ' + (json.error||'nieznany błąd'), true);
       }
     }catch(e){
-      document.getElementById('scanZone').classList.remove('busy');
-      zoneLabel.textContent = 'Wybierz inne zdjęcie';
+      document.getElementById('scanZone'+target).classList.remove('busy');
+      zoneLabel.textContent = defaultLabel;
       showToast('Błąd połączenia z serwerem odczytu', true);
     }
   };
@@ -894,48 +917,54 @@ function applyOcrData(data){
   });
 }
 
-/* pinch-zoom / pan / wheel-zoom do weryfikacji zdjęcia */
-let pzScale=1, pzX=0, pzY=0, pzStartDist=0, pzStartScale=1;
-let pzDragging=false, pzLastX=0, pzLastY=0;
-function pzClamp(){
-  const box = document.getElementById('photoReview');
-  const maxX = (box.clientWidth * (pzScale-1)) / 2;
-  const maxY = (box.clientHeight * (pzScale-1)) / 2;
-  pzX = Math.max(-maxX, Math.min(maxX, pzX));
-  pzY = Math.max(-maxY, Math.min(maxY, pzY));
+/* pinch-zoom / pan / wheel-zoom do weryfikacji zdjęcia — osobny stan dla A i B */
+const pz = {
+  A: { scale:1, x:0, y:0, startDist:0, startScale:1, dragging:false, lastX:0, lastY:0 },
+  B: { scale:1, x:0, y:0, startDist:0, startScale:1, dragging:false, lastX:0, lastY:0 },
+};
+function pzClamp(t){
+  const s = pz[t];
+  const box = document.getElementById('photoReview'+t);
+  const maxX = (box.clientWidth * (s.scale-1)) / 2;
+  const maxY = (box.clientHeight * (s.scale-1)) / 2;
+  s.x = Math.max(-maxX, Math.min(maxX, s.x));
+  s.y = Math.max(-maxY, Math.min(maxY, s.y));
 }
-function pzApply(){ pzClamp(); document.getElementById('photoImg').style.transform = `translate(${pzX}px,${pzY}px) scale(${pzScale})`; }
-function zoomReset(){ pzScale=1; pzX=0; pzY=0; pzApply(); }
-function zoomBy(d){ pzScale = Math.min(4, Math.max(1, +(pzScale+d).toFixed(2))); if(pzScale===1){pzX=0;pzY=0;} pzApply(); }
+function pzApply(t){ pzClamp(t); const s=pz[t]; document.getElementById('photoImg'+t).style.transform = `translate(${s.x}px,${s.y}px) scale(${s.scale})`; }
+function zoomReset(t){ const s=pz[t]; s.scale=1; s.x=0; s.y=0; pzApply(t); }
+function zoomBy(t,d){ const s=pz[t]; s.scale = Math.min(4, Math.max(1, +(s.scale+d).toFixed(2))); if(s.scale===1){s.x=0;s.y=0;} pzApply(t); }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  const pRev = document.getElementById('photoReview');
-  pRev.addEventListener('touchstart', e=>{
-    if(e.touches.length===2){
-      pzStartDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-      pzStartScale = pzScale;
-    } else if(e.touches.length===1){
-      pzDragging=true; pzLastX=e.touches[0].clientX; pzLastY=e.touches[0].clientY;
-    }
-  }, {passive:true});
-  pRev.addEventListener('touchmove', e=>{
-    e.preventDefault();
-    if(e.touches.length===2 && pzStartDist){
-      const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-      pzScale = Math.min(4, Math.max(1, pzStartScale * (dist/pzStartDist)));
-      pzApply();
-    } else if(pzDragging && e.touches.length===1 && pzScale>1){
-      pzX += e.touches[0].clientX - pzLastX; pzY += e.touches[0].clientY - pzLastY;
-      pzLastX = e.touches[0].clientX; pzLastY = e.touches[0].clientY;
-      pzApply();
-    }
-  }, {passive:false});
-  pRev.addEventListener('touchend', ()=>{ pzDragging=false; pzStartDist=0; if(pzScale===1){pzX=0;pzY=0;pzApply();} });
-  pRev.addEventListener('mousedown', e=>{ if(pzScale<=1) return; pzDragging=true; pzLastX=e.clientX; pzLastY=e.clientY; pRev.classList.add('dragging'); });
-  window.addEventListener('mousemove', e=>{ if(!pzDragging) return; pzX += e.clientX-pzLastX; pzY += e.clientY-pzLastY; pzLastX=e.clientX; pzLastY=e.clientY; pzApply(); });
-  window.addEventListener('mouseup', ()=>{ pzDragging=false; pRev.classList.remove('dragging'); });
-  pRev.addEventListener('wheel', e=>{ e.preventDefault(); zoomBy(e.deltaY<0?0.25:-0.25); }, {passive:false});
-  pRev.addEventListener('dblclick', ()=> pzScale>1 ? zoomReset() : zoomBy(1.5));
+  ['A','B'].forEach(t=>{
+    const pRev = document.getElementById('photoReview'+t);
+    const s = pz[t];
+    pRev.addEventListener('touchstart', e=>{
+      if(e.touches.length===2){
+        s.startDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        s.startScale = s.scale;
+      } else if(e.touches.length===1){
+        s.dragging=true; s.lastX=e.touches[0].clientX; s.lastY=e.touches[0].clientY;
+      }
+    }, {passive:true});
+    pRev.addEventListener('touchmove', e=>{
+      e.preventDefault();
+      if(e.touches.length===2 && s.startDist){
+        const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        s.scale = Math.min(4, Math.max(1, s.startScale * (dist/s.startDist)));
+        pzApply(t);
+      } else if(s.dragging && e.touches.length===1 && s.scale>1){
+        s.x += e.touches[0].clientX - s.lastX; s.y += e.touches[0].clientY - s.lastY;
+        s.lastX = e.touches[0].clientX; s.lastY = e.touches[0].clientY;
+        pzApply(t);
+      }
+    }, {passive:false});
+    pRev.addEventListener('touchend', ()=>{ s.dragging=false; s.startDist=0; if(s.scale===1){s.x=0;s.y=0;pzApply(t);} });
+    pRev.addEventListener('mousedown', e=>{ if(s.scale<=1) return; s.dragging=true; s.lastX=e.clientX; s.lastY=e.clientY; pRev.classList.add('dragging'); });
+    window.addEventListener('mousemove', e=>{ if(!s.dragging) return; s.x += e.clientX-s.lastX; s.y += e.clientY-s.lastY; s.lastX=e.clientX; s.lastY=e.clientY; pzApply(t); });
+    window.addEventListener('mouseup', ()=>{ s.dragging=false; pRev.classList.remove('dragging'); });
+    pRev.addEventListener('wheel', e=>{ e.preventDefault(); zoomBy(t, e.deltaY<0?0.25:-0.25); }, {passive:false});
+    pRev.addEventListener('dblclick', ()=> s.scale>1 ? zoomReset(t) : zoomBy(t,1.5));
+  });
 
   document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
   document.getElementById('overlay-koszt').addEventListener('click', e=>{ if(e.target.id==='overlay-koszt') closeCostSheet(); });

@@ -53,10 +53,14 @@ function handleOcr(body) {
     return jsonOut({ ok: false, error: 'Brak klucza GEMINI_API_KEY w ustawieniach skryptu (Project Settings -> Script Properties).' });
   }
 
-  const prompt = 'Jesteś asystentem odczytującym dane ze zdjęcia paragonu za paliwo lub licznika (drogomierza) samochodu. ' +
-    'Odczytaj widoczne wartości i zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
-    '{"liters": liczba_lub_null, "pricePerLiter": liczba_lub_null, "totalCost": liczba_lub_null, "odometerKm": liczba_całkowita_lub_null}. ' +
-    'Jeśli wartość nie jest widoczna na zdjęciu, ustaw null. Liczby zawsze z kropką jako separatorem dziesiętnym, bez jednostek i bez spacji.';
+  const prompt = body.mode === 'licznik'
+    ? 'Jesteś asystentem odczytującym przebieg (drogomierz / licznik kilometrów) samochodu ze zdjęcia deski rozdzielczej. ' +
+      'Odczytaj widoczną wartość przebiegu w kilometrach i zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
+      '{"odometerKm": liczba_całkowita_lub_null}. Jeśli przebieg nie jest wyraźnie widoczny, ustaw null.'
+    : 'Jesteś asystentem odczytującym dane ze zdjęcia paragonu za paliwo lub wyświetlacza dystrybutora. ' +
+      'Odczytaj widoczne wartości i zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
+      '{"liters": liczba_lub_null, "pricePerLiter": liczba_lub_null, "totalCost": liczba_lub_null}. ' +
+      'Jeśli wartość nie jest widoczna na zdjęciu, ustaw null. Liczby zawsze z kropką jako separatorem dziesiętnym, bez jednostek i bez spacji.';
 
   const payload = {
     contents: [{
@@ -72,7 +76,7 @@ function handleOcr(body) {
   // zalecany model flash -- dzięki temu nie trzeba wracać do tego kodu przy
   // każdej zmianie nazwy/wersji modelu przez Google. Reszta listy to zapasowe
   // nazwy na wypadek gdyby alias przestał działać.
-  const models = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+  const models = ['gemini-flash-latest', 'gemini-3.6-flash'];
   const cached = PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL_OK');
   if (cached && models.indexOf(cached) === -1) models.unshift(cached);
 
