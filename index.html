@@ -1,0 +1,932 @@
+<title>Paliwo PF</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#12181d; --panel:#1b232a; --panel2:#212b33; --line:#2c3841;
+    --ink:#e8edf1; --ink-dim:#8fa0ab; --amber:#e8a33d; --green:#4caf7d;
+    --red:#d9695f; --blue:#5b9bd5; --radius:12px;
+    --font-display:'Manrope',sans-serif; --font-body:'Public Sans',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); -webkit-font-smoothing:antialiased;
+    padding-inline:14px; padding-block:0 90px;
+  }
+  h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0;}
+  .mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  button{font-family:inherit;}
+  a{color:inherit;}
+
+  .topbar{
+    position:sticky; top:0; z-index:10; background:var(--bg);
+    padding-block:14px 8px; margin-inline:-14px; padding-inline:14px;
+  }
+  .brand{display:flex; align-items:baseline; gap:8px; margin-bottom:12px;}
+  .brand .name{font-family:var(--font-display); font-weight:800; font-size:1.15rem; letter-spacing:.2px;}
+  .brand .sub{color:var(--ink-dim); font-size:.78rem;}
+  .sync{
+    margin-left:auto; display:flex; align-items:center; gap:5px; font-size:.68rem; color:var(--ink-dim);
+  }
+  .sync .dot{width:7px; height:7px; border-radius:50%; background:var(--ink-dim); flex:0 0 auto;}
+  .sync.ok .dot{background:var(--green);}
+  .sync.local .dot{background:var(--amber);}
+  .sync.err .dot{background:var(--red);}
+
+  .tabs{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    flex:0 0 auto; display:flex; align-items:center; gap:6px;
+    padding:9px 14px; border-radius:999px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink-dim); font-size:.86rem; font-weight:600;
+    white-space:nowrap; cursor:pointer; user-select:none;
+  }
+  .tab.active{background:var(--amber); border-color:var(--amber); color:#1b1204;}
+  .tab.ghost{background:transparent; border-style:dashed; color:var(--ink-dim);}
+
+  .section{margin-top:20px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:10px;}
+  .section-head h2{font-size:.95rem; font-weight:700;}
+  .section-head .link{font-size:.78rem; color:var(--blue); cursor:pointer;}
+
+  .vehicle-head{display:flex; align-items:center; justify-content:space-between; margin-top:14px; gap:10px;}
+  .vehicle-head h1{font-size:1.15rem;}
+  .vehicle-actions{display:flex; gap:6px;}
+  .vehicle-actions button{
+    background:var(--panel); border:1px solid var(--line); color:var(--ink-dim);
+    font-size:.72rem; padding:6px 10px; border-radius:999px; cursor:pointer; font-weight:600;
+  }
+  .vehicle-actions .danger{color:var(--red);}
+
+  .hero{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;}
+  .stat-hero{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px; display:flex; flex-direction:column; gap:6px;
+  }
+  .stat-hero .label{font-size:.72rem; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.05em;}
+  .stat-hero .value{font-family:var(--font-mono); font-size:1.7rem; font-weight:600; line-height:1;}
+  .stat-hero .value.amber{color:var(--amber);}
+  .stat-hero .unit{font-size:.85rem; color:var(--ink-dim); font-weight:500;}
+
+  .grid-summary{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
+  .tile{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:11px 12px;}
+  .tile .t-label{font-size:.7rem; color:var(--ink-dim);}
+  .tile .t-value{font-family:var(--font-mono); font-size:1.15rem; font-weight:600; margin-top:2px;}
+  .tile .t-value.green{color:var(--green);}
+  .tile .t-value.red{color:var(--red);}
+  .month-switch{font-size:.78rem; color:var(--ink-dim); display:flex; gap:2px; align-items:center;}
+  .month-switch button{background:none;border:none;color:var(--ink-dim);font-size:1rem;cursor:pointer;padding:2px 6px;}
+
+  .segmented{display:flex; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:3px; gap:2px; margin-bottom:12px;}
+  .segmented button{flex:1; border:none; background:transparent; color:var(--ink-dim); font-family:var(--font-body); font-size:.8rem; font-weight:600; padding:7px 0; border-radius:999px; cursor:pointer;}
+  .segmented button.active{background:var(--panel2); color:var(--ink); box-shadow:0 0 0 1px var(--line) inset;}
+
+  .chart-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 12px 8px;}
+  .chart-legend{display:flex; gap:16px; font-size:.72rem; color:var(--ink-dim); margin-top:4px; padding-bottom:4px;}
+  .chart-legend span{display:flex; align-items:center; gap:5px;}
+  .chart-legend i{width:9px;height:9px;border-radius:2px;display:inline-block;}
+  .chart-empty{font-size:.8rem; color:var(--ink-dim); padding:20px 4px; text-align:center;}
+
+  .entry{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:8px; overflow:hidden;}
+  .entry-head{display:flex; align-items:center; justify-content:space-between; padding:12px 13px; cursor:pointer; gap:8px;}
+  .entry-head .left{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .entry-head .date{font-size:.82rem; font-weight:600;}
+  .entry-head .odo{font-size:.72rem; color:var(--ink-dim); font-family:var(--font-mono);}
+  .entry-head .right{display:flex; align-items:center; gap:10px; flex:0 0 auto;}
+  .entry-head .cost{font-family:var(--font-mono); font-weight:600; font-size:.95rem;}
+  .entry-head .consumption{font-family:var(--font-mono); font-size:.74rem; padding:2px 7px; border-radius:6px; background:rgba(76,175,125,.12); color:var(--green);}
+  .entry-head .consumption.high{background:rgba(217,105,95,.12); color:var(--red);}
+  .entry-head .chev{color:var(--ink-dim); transition:transform .15s; flex:0 0 auto;}
+  .entry.open .chev{transform:rotate(180deg);}
+  .entry-body{display:none; padding:0 13px 13px; border-top:1px solid var(--line);}
+  .entry.open .entry-body{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding-top:11px;}
+  .entry-body .f-label{font-size:.68rem; color:var(--ink-dim);}
+  .entry-body .f-value{font-family:var(--font-mono); font-size:.88rem; margin-top:1px;}
+  .entry.baseline .entry-head .cost{color:var(--ink-dim); font-weight:500;}
+  .cat-pill{font-size:.68rem; padding:2px 8px; border-radius:999px; font-weight:600; background:rgba(91,155,213,.12); color:var(--blue);}
+  .empty-state{color:var(--ink-dim); font-size:.85rem; text-align:center; padding:20px 10px; border:1px dashed var(--line); border-radius:var(--radius); background:var(--panel);}
+
+  .btn-add-cost{background:var(--blue); color:#0c1720; border:none; font-weight:700; font-size:.76rem; padding:6px 12px; border-radius:999px; cursor:pointer;}
+
+  .fleet-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:13px; margin-bottom:8px;}
+  .fleet-card .fc-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;}
+  .fleet-card .fc-name{font-weight:700; font-size:.92rem; display:flex; align-items:center; gap:7px; min-width:0;}
+  .fc-metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+  .fc-metrics .fm-label{font-size:.65rem; color:var(--ink-dim);}
+  .fc-metrics .fm-value{font-family:var(--font-mono); font-size:.86rem; font-weight:600; margin-top:1px;}
+  .fleet-total{background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-top:14px;}
+  .fleet-total h3{font-size:.85rem; margin-bottom:10px;}
+
+  .add-vehicle-box{background:var(--panel); border:1px dashed var(--line); border-radius:var(--radius); padding:16px; margin-top:14px; text-align:center; color:var(--ink-dim); font-size:.85rem;}
+  .add-vehicle-box input{margin-top:10px; width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:10px; font-family:var(--font-mono);}
+  .add-vehicle-box button{margin-top:10px; background:var(--amber); color:#1b1204; border:none; font-weight:700; padding:9px 18px; border-radius:999px; font-size:.85rem; cursor:pointer;}
+
+  .fab{position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:50%; background:var(--amber); color:#1b1204; border:none; font-size:1.6rem; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.4); cursor:pointer; z-index:20;}
+  .fab[hidden]{display:none;}
+
+  .overlay{position:fixed; inset:0; background:rgba(8,11,14,.72); z-index:30; display:none; align-items:flex-end; justify-content:center;}
+  .overlay.open{display:flex;}
+  .sheet{background:var(--panel); border:1px solid var(--line); border-radius:16px 16px 0 0; width:100%; max-width:480px; padding:18px 16px 22px; max-height:88vh; overflow-y:auto;}
+  .sheet h3{font-size:1rem; margin-bottom:14px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:.75rem; color:var(--ink-dim); margin-bottom:5px;}
+  .field input,.field select{width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:10px 11px; font-family:var(--font-mono); font-size:.92rem;}
+  .field select{font-family:var(--font-body);}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .sheet-actions{display:flex; gap:10px; margin-top:6px;}
+  .sheet-actions button{flex:1; padding:11px; border-radius:10px; font-weight:700; font-size:.88rem; cursor:pointer; border:none;}
+  .btn-cancel{background:var(--panel2); color:var(--ink-dim); border:1px solid var(--line) !important;}
+  .btn-save{background:var(--amber); color:#1b1204;}
+  .field-error{font-size:.72rem; color:var(--red); margin-top:12px; display:none;}
+  .field-error.show{display:block;}
+
+  .hint-tag{font-size:.68rem; color:var(--ink-dim); margin-top:4px;}
+  .autofilled-tag{font-size:.62rem; color:var(--blue); margin-left:6px; font-weight:600;}
+  .field.autofilled input, .field.autofilled select{border-color:var(--blue);}
+
+  .scan-zone{border:1px dashed var(--blue); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:16px; background:rgba(91,155,213,.06);}
+  .scan-zone .icon{font-size:1.3rem;}
+  .scan-zone .txt{display:flex; flex-direction:column;}
+  .scan-zone .txt b{font-size:.83rem; color:var(--ink);}
+  .scan-zone .txt span{font-size:.7rem; color:var(--ink-dim);}
+  .scan-zone.busy{opacity:.6; pointer-events:none;}
+
+  .photo-review{position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line); background:#05080a; height:240px; touch-action:none; margin-bottom:10px; display:none; cursor:grab;}
+  .photo-review.show{display:block;}
+  .photo-review.dragging{cursor:grabbing;}
+  .photo-review img{position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; transform-origin:center center; will-change:transform; user-select:none; -webkit-user-drag:none; pointer-events:none;}
+  .photo-review .zoom-ctrl{position:absolute; right:8px; bottom:8px; display:flex; gap:6px; z-index:2;}
+  .photo-review .zoom-ctrl button{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:rgba(18,24,29,.85); color:var(--ink); font-size:1rem; cursor:pointer;}
+  .photo-review .verify-badge{position:absolute; left:8px; top:8px; background:rgba(18,24,29,.85); border:1px solid var(--line); color:var(--ink-dim); font-size:.65rem; padding:3px 8px; border-radius:999px; z-index:2;}
+
+  .entry-actions{grid-column:1/-1; display:flex; gap:8px; margin-top:2px; padding-top:10px; border-top:1px solid var(--line);}
+  .entry-actions button{flex:1; padding:8px; border-radius:8px; font-size:.78rem; font-weight:600; cursor:pointer; background:var(--panel2); border:1px solid var(--line); color:var(--ink-dim);}
+  .entry-actions .btn-del{color:var(--red);}
+  .entry-actions .btn-edit{color:var(--blue);}
+
+  .toast{position:fixed; left:50%; bottom:90px; transform:translateX(-50%) translateY(20px); background:var(--panel2); border:1px solid var(--line); color:var(--ink); padding:10px 16px; border-radius:10px; font-size:.82rem; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:40; display:flex; align-items:center; gap:8px; max-width:88vw;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast .tdot{width:7px;height:7px;border-radius:50%;background:var(--green); flex:0 0 auto;}
+  .toast.err .tdot{background:var(--red);}
+
+  @media (min-width:640px){ body{max-width:520px; margin-inline:auto;} }
+</style>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="name">⛽ Paliwo PF</span>
+    <span class="sub">RA-STER · dziennik tankowań</span>
+    <span class="sync local" id="syncIndicator"><span class="dot"></span><span id="syncText">lokalnie</span></span>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</div>
+
+<div id="content"></div>
+
+<button class="fab" id="fab" onclick="openFillupSheet()">+</button>
+
+<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="onPhotoPicked(event)">
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h3 id="sheet-title">Nowe tankowanie</h3>
+    <div class="scan-zone" id="scanZone" onclick="document.getElementById('photoInput').click()">
+      <span class="icon">📷</span>
+      <div class="txt"><b id="scanZoneLabel">Wybierz zdjęcie paragonu / licznika</b><span>Z galerii — pola poniżej wypełnią się same, do sprawdzenia przed zapisem</span></div>
+    </div>
+    <div class="photo-review" id="photoReview">
+      <span class="verify-badge">Porównaj ze zdjęciem →</span>
+      <img id="photoImg" src="" alt="Podgląd zdjęcia paragonu">
+      <div class="zoom-ctrl">
+        <button type="button" onclick="zoomBy(-0.3)">−</button>
+        <button type="button" onclick="zoomBy(0.3)">+</button>
+        <button type="button" onclick="zoomReset()">⟲</button>
+      </div>
+    </div>
+    <div class="field" id="fld-data"><label for="f-data">Data</label><input id="f-data" type="date"></div>
+    <div class="field" id="fld-przebieg"><label for="f-przebieg">Przebieg (km)</label><input id="f-przebieg" type="number" placeholder="np. 347560"></div>
+    <div class="row2">
+      <div class="field" id="fld-litry"><label for="f-litry">Paliwo (l)</label><input id="f-litry" type="number" step="0.01" placeholder="np. 70,20" oninput="calcFromLitryCena()"></div>
+      <div class="field" id="fld-cena"><label for="f-cena">Cena / l</label><input id="f-cena" type="number" step="0.01" placeholder="np. 8,30" oninput="calcFromLitryCena()"></div>
+    </div>
+    <div class="field" id="fld-koszt"><label for="f-koszt">Koszt całkowity (zł)</label><input id="f-koszt" type="number" step="0.01" placeholder="wyliczy się automatycznie" oninput="calcFromKoszt()"></div>
+    <div class="field-error" id="f-error"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="closeSheet()">Anuluj</button>
+      <button class="btn-save" onclick="saveFillup()">Zapisz tankowanie</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-koszt">
+  <div class="sheet">
+    <h3 id="cost-sheet-title">Nowy koszt</h3>
+    <div class="field"><label for="c-data">Data</label><input id="c-data" type="date"></div>
+    <div class="field"><label for="c-przebieg">Przebieg (km)</label><input id="c-przebieg" type="number"><div class="hint-tag" id="c-hint">podpowiedź: przebieg z ostatniego tankowania — popraw, jeśli auto pojechało dalej</div></div>
+    <div class="field"><label for="c-kategoria">Kategoria</label>
+      <select id="c-kategoria">
+        <option>Przegląd</option><option>Opony</option><option>Ubezpieczenie</option><option>Naprawa</option><option>Inne</option>
+      </select>
+    </div>
+    <div class="field"><label for="c-kwota">Kwota (zł)</label><input id="c-kwota" type="number" step="0.01" placeholder="np. 450"></div>
+    <div class="field"><label for="c-notatka">Notatka (opcjonalnie)</label><input id="c-notatka" type="text" placeholder="np. wymiana oleju"></div>
+    <div class="field-error" id="c-error"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" onclick="closeCostSheet()">Anuluj</button>
+      <button class="btn-save" style="background:var(--blue); color:#0c1720;" onclick="saveCost()">Zapisz koszt</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="tdot"></span><span id="toast-text"></span></div>
+
+<script>
+/* ====================== KONFIGURACJA ====================== */
+// Wklej tu URL wdrożonego Google Apps Script (kończy się na /exec).
+// Dopóki puste, appka działa wyłącznie lokalnie (localStorage) bez synchronizacji do Arkusza.
+const GAS_URL = '';
+const STORAGE_KEY = 'paliwoPfState';
+
+/* ====================== STAN / DANE ====================== */
+function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2)); }
+
+function seedState(){
+  const vId = uid();
+  return {
+    vehicles: [{ id: vId, name: 'Volkswagen T5' }],
+    fillups: [
+      // Dane przepisane 1:1 z Twojej tabeli. Dat w tabeli nie było — to orientacyjne
+      // placeholdery, popraw je przez "Edytuj" na każdym wpisie.
+      { id: uid(), vehicleId: vId, date: '2026-07-05', odo: 344896, liters: 76.26, pricePerLiter: 8.14, totalCost: 620.76 },
+      { id: uid(), vehicleId: vId, date: '2026-07-28', odo: 345590, liters: 75.14, pricePerLiter: 7.44, totalCost: 559.04 },
+      { id: uid(), vehicleId: vId, date: '2026-08-19', odo: 346249, liters: 71.91, pricePerLiter: 8.84, totalCost: 635.66 },
+    ],
+    costs: [],
+  };
+}
+
+let state = loadState();
+let activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+let editingFillupId = null;
+let editingCostId = null;
+const uiState = {}; // per-vehicle ephemeral UI: { month:'YYYY-MM', period:'dzien' }
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  const s = seedState();
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }catch(e){}
+  return s;
+}
+
+function saveState(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  setSyncStatus('local');
+  syncRemote();
+}
+
+function setSyncStatus(kind){
+  const el = document.getElementById('syncIndicator');
+  const txt = document.getElementById('syncText');
+  el.className = 'sync ' + kind;
+  txt.textContent = kind==='ok' ? 'zsynchronizowano' : kind==='err' ? 'błąd synchronizacji' : 'zapisano lokalnie';
+}
+
+async function syncRemote(){
+  if(!GAS_URL) return;
+  try{
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: {'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ key: STORAGE_KEY, value: JSON.stringify(state) })
+    });
+    if(res.ok) setSyncStatus('ok'); else setSyncStatus('err');
+  }catch(e){ setSyncStatus('err'); }
+}
+
+async function loadRemoteOnStart(){
+  if(!GAS_URL) return;
+  try{
+    const res = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY));
+    const text = await res.text();
+    if(text){
+      const remote = JSON.parse(text);
+      if(remote && remote.vehicles) {
+        state = remote;
+        if(!state.vehicles.find(v=>v.id===activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+        setSyncStatus('ok');
+        render();
+      }
+    }
+  }catch(e){ /* offline / brak konfiguracji — zostajemy przy danych lokalnych */ }
+}
+
+/* ====================== POMOCNICZE / OBLICZENIA ====================== */
+function pad(n){ return String(n).padStart(2,'0'); }
+function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function daysBetween(iso1, iso2){
+  const [y1,m1,d1] = iso1.split('-').map(Number);
+  const [y2,m2,d2] = iso2.split('-').map(Number);
+  return Math.round((Date.UTC(y2,m2-1,d2) - Date.UTC(y1,m1-1,d1)) / 86400000);
+}
+function monthKey(iso){ return iso.slice(0,7); }
+function fmtMonth(key){
+  const names = ['styczeń','luty','marzec','kwiecień','maj','czerwiec','lipiec','sierpień','wrzesień','październik','listopad','grudzień'];
+  const [y,m] = key.split('-').map(Number);
+  return names[m-1] + ' ' + y;
+}
+function fmtDateShort(iso){
+  const names = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+  const [y,m,d] = iso.split('-').map(Number);
+  return `${d} ${names[m-1]} ${y}`;
+}
+function n(v, decimals=2){ return Number(v||0).toLocaleString('pl-PL', {minimumFractionDigits:decimals, maximumFractionDigits:decimals}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function vehicleById(id){ return state.vehicles.find(v=>v.id===id); }
+function fillupsFor(vehicleId){
+  return state.fillups.filter(f=>f.vehicleId===vehicleId).slice().sort((a,b)=> a.date===b.date ? a.odo-b.odo : a.date.localeCompare(b.date));
+}
+function costsFor(vehicleId){
+  return state.costs.filter(c=>c.vehicleId===vehicleId).slice().sort((a,b)=> a.date.localeCompare(b.date));
+}
+
+// Zwraca listę { fillup, distance, consumption, costPer100, isBaseline } w kolejności chronologicznej.
+function intervalsFor(vehicleId){
+  const fs = fillupsFor(vehicleId);
+  return fs.map((f,i)=>{
+    if(i===0) return { fillup:f, distance:null, consumption:null, costPer100:null, isBaseline:true };
+    const prev = fs[i-1];
+    const distance = f.odo - prev.odo;
+    const consumption = distance>0 ? (f.liters/distance*100) : null;
+    const costPer100 = distance>0 ? (f.totalCost/distance*100) : null;
+    return { fillup:f, distance, consumption, costPer100, isBaseline:false };
+  });
+}
+
+function avgConsumption(vehicleId){
+  const ivs = intervalsFor(vehicleId).filter(iv=>!iv.isBaseline && iv.distance>0);
+  if(!ivs.length) return null;
+  const liters = ivs.reduce((s,iv)=>s+iv.fillup.liters,0);
+  const dist = ivs.reduce((s,iv)=>s+iv.distance,0);
+  return dist>0 ? liters/dist*100 : null;
+}
+
+function monthSummary(vehicleId, mKey){
+  const ivs = intervalsFor(vehicleId).filter(iv=>monthKey(iv.fillup.date)===mKey);
+  const distance = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.distance,0);
+  const litersUsed = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.fillup.liters,0);
+  const fuelCost = state.fillups.filter(f=>f.vehicleId===vehicleId && monthKey(f.date)===mKey).reduce((s,f)=>s+f.totalCost,0);
+  const otherCost = costsFor(vehicleId).filter(c=>monthKey(c.date)===mKey).reduce((s,c)=>s+c.amount,0);
+  const consumption = distance>0 ? litersUsed/distance*100 : null;
+  return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption };
+}
+
+function isoWeekLabel(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(y,m-1,d));
+  const dayNum = (date.getUTCDay()+6)%7;
+  date.setUTCDate(date.getUTCDate()-dayNum+3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(),0,4));
+  const week = 1 + Math.round(((date-firstThursday)/86400000 - 3 + ((firstThursday.getUTCDay()+6)%7)) / 7);
+  return 'T' + week;
+}
+
+function trendSeries(vehicleId, period){
+  const ivs = intervalsFor(vehicleId).filter(iv=>!iv.isBaseline);
+  if(period==='dzien'){
+    return ivs.map(iv=>({ label: fmtDateShort(iv.fillup.date).replace(/ \d{4}$/,''), consumption: iv.consumption, costPer100: iv.costPer100 }));
+  }
+  const groupKey = period==='tydzien' ? (iv=>isoWeekLabel(iv.fillup.date)) : (iv=>monthKey(iv.fillup.date));
+  const groups = {};
+  ivs.forEach(iv=>{
+    const k = groupKey(iv);
+    if(!groups[k]) groups[k] = {liters:0, distance:0, cost:0};
+    groups[k].liters += iv.fillup.liters; groups[k].distance += iv.distance; groups[k].cost += iv.fillup.totalCost;
+  });
+  return Object.keys(groups).sort().map(k=>{
+    const g = groups[k];
+    return {
+      label: period==='miesiac' ? k.slice(5)+'/'+k.slice(2,4) : k,
+      consumption: g.distance>0 ? g.liters/g.distance*100 : null,
+      costPer100: g.distance>0 ? g.cost/g.distance*100 : null,
+    };
+  });
+}
+
+/* ====================== RENDEROWANIE ====================== */
+function render(){ renderTabs(); renderContent(); document.getElementById('fab').hidden = !vehicleById(activeTab); }
+
+function renderTabs(){
+  const tabs = document.getElementById('tabs');
+  let html = '';
+  state.vehicles.forEach(v=>{
+    html += `<div class="tab ${activeTab===v.id?'active':''}" onclick="switchTab('${v.id}')">${esc(v.name)}</div>`;
+  });
+  html += `<div class="tab ${activeTab==='flota'?'active':''}" onclick="switchTab('flota')">📊 Flota</div>`;
+  html += `<div class="tab ghost ${activeTab==='dodaj'?'active':''}" onclick="switchTab('dodaj')">+ Dodaj auto</div>`;
+  tabs.innerHTML = html;
+}
+
+function switchTab(id){ activeTab = id; render(); }
+
+function renderContent(){
+  const el = document.getElementById('content');
+  if(activeTab==='flota') el.innerHTML = renderFleet();
+  else if(activeTab==='dodaj') el.innerHTML = renderAddVehicle();
+  else if(vehicleById(activeTab)) el.innerHTML = renderVehicle(activeTab);
+  else { activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota'; el.innerHTML = activeTab==='flota' ? renderFleet() : renderVehicle(activeTab); }
+}
+
+function renderVehicle(vehicleId){
+  const v = vehicleById(vehicleId);
+  const fs = fillupsFor(vehicleId);
+  const cs = costsFor(vehicleId);
+  const ivs = intervalsFor(vehicleId);
+  const last = fs[fs.length-1];
+  const daysSince = last ? daysBetween(last.date, todayISO()) : null;
+
+  if(!uiState[vehicleId]) uiState[vehicleId] = { month: monthKey(todayISO()), period:'dzien' };
+  const ui = uiState[vehicleId];
+  const ms = monthSummary(vehicleId, ui.month);
+  const avg = avgConsumption(vehicleId);
+
+  let html = `
+    <div class="vehicle-head">
+      <h1>${esc(v.name)}</h1>
+      <div class="vehicle-actions">
+        <button onclick="renameVehicle('${vehicleId}')">✏️ Nazwa</button>
+        <button class="danger" onclick="deleteVehicle('${vehicleId}')">🗑️ Usuń auto</button>
+      </div>
+    </div>
+    <div class="hero">
+      <div class="stat-hero"><span class="label">Dni od tankowania</span><span class="value amber">${daysSince===null?'—':daysSince}${daysSince===null?'':'<span class="unit"> dni</span>'}</span></div>
+      <div class="stat-hero"><span class="label">Aktualny przebieg</span><span class="value mono">${last?n(last.odo,0):'—'}${last?'<span class="unit"> km</span>':''}</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Podsumowanie — ${fmtMonth(ui.month)}</h2>
+        <div class="month-switch"><button onclick="shiftMonth('${vehicleId}',-1)">‹</button><button onclick="shiftMonth('${vehicleId}',1)">›</button></div>
+      </div>
+      <div class="grid-summary">
+        <div class="tile"><div class="t-label">Przejechano</div><div class="t-value">${n(ms.distance,0)} <span style="font-size:.7rem;color:var(--ink-dim)">km</span></div></div>
+        <div class="tile"><div class="t-label">Paliwo zużyte</div><div class="t-value">${n(ms.litersUsed,1)} <span style="font-size:.7rem;color:var(--ink-dim)">l</span></div></div>
+        <div class="tile"><div class="t-label">Śr. spalanie</div><div class="t-value green">${ms.consumption===null?'—':n(ms.consumption,2)} <span style="font-size:.7rem;color:var(--ink-dim)">l/100km</span></div></div>
+        <div class="tile"><div class="t-label">Koszt łączny</div><div class="t-value">${n(ms.total,0)} <span style="font-size:.7rem;color:var(--ink-dim)">zł</span></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Trend</h2></div>
+      <div class="segmented">
+        <button class="${ui.period==='dzien'?'active':''}" onclick="setPeriod('${vehicleId}','dzien')">Dzień</button>
+        <button class="${ui.period==='tydzien'?'active':''}" onclick="setPeriod('${vehicleId}','tydzien')">Tydzień</button>
+        <button class="${ui.period==='miesiac'?'active':''}" onclick="setPeriod('${vehicleId}','miesiac')">Miesiąc</button>
+      </div>
+      <div class="chart-card">
+        ${renderChart(vehicleId, ui.period)}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Tankowania</h2></div>
+      ${fs.length===0 ? '<div class="empty-state">Brak tankowań — dodaj pierwsze przyciskiem "+"</div>' : ivs.map(iv=>renderFillupEntry(iv, avg)).join('')}
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Inne koszty eksploatacji</h2><button class="btn-add-cost" onclick="openCostSheet()">+ Dodaj koszt</button></div>
+      ${cs.length===0 ? '<div class="empty-state">Brak innych kosztów</div>' : cs.map(c=>renderCostEntry(c)).join('')}
+    </div>
+  `;
+  return html;
+}
+
+function renderFillupEntry(iv, avg){
+  const f = iv.fillup;
+  let rightExtra = '';
+  if(!iv.isBaseline){
+    const high = avg!=null && iv.consumption > avg*1.05;
+    rightExtra = `<span class="consumption ${high?'high':''}">${n(iv.consumption,2)} l/100</span>`;
+  }
+  return `
+    <div class="entry ${iv.isBaseline?'baseline':''}">
+      <div class="entry-head" onclick="this.parentElement.classList.toggle('open')">
+        <div class="left"><span class="date">${iv.isBaseline?'Start · ':''}${fmtDateShort(f.date)}</span><span class="odo mono">${n(f.odo,0)} km${iv.isBaseline?'':' · '+n(iv.distance,0)+' km'}</span></div>
+        <div class="right">${rightExtra}<span class="cost mono">${n(f.totalCost,2)} zł</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2"/></svg></div>
+      </div>
+      <div class="entry-body">
+        <div><div class="f-label">Litry</div><div class="f-value">${n(f.liters,2)} l</div></div>
+        <div><div class="f-label">Cena/l</div><div class="f-value">${n(f.pricePerLiter,2)} zł</div></div>
+        <div><div class="f-label">${iv.isBaseline?'Spalanie':'Koszt/100km'}</div><div class="f-value">${iv.isBaseline?'— (baza)':n(iv.costPer100,2)+' zł'}</div></div>
+        <div class="entry-actions">
+          <button class="btn-edit" onclick="editFillup('${f.id}')">✏️ Edytuj</button>
+          <button class="btn-del" onclick="deleteFillup('${f.id}')">🗑️ Usuń</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderCostEntry(c){
+  return `
+    <div class="entry">
+      <div class="entry-head" onclick="this.parentElement.classList.toggle('open')">
+        <div class="left"><span class="date">${fmtDateShort(c.date)} <span class="cat-pill">${esc(c.category)}</span></span><span class="odo mono">${n(c.odo,0)} km</span></div>
+        <div class="right"><span class="cost mono">${n(c.amount,2)} zł</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2"/></svg></div>
+      </div>
+      <div class="entry-body">
+        <div style="grid-column:1/-1"><div class="f-label">Notatka</div><div class="f-value" style="font-family:var(--font-body)">${esc(c.note)||'—'}</div></div>
+        <div class="entry-actions">
+          <button class="btn-edit" onclick="editCost('${c.id}')">✏️ Edytuj</button>
+          <button class="btn-del" onclick="deleteCost('${c.id}')">🗑️ Usuń</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderFleet(){
+  if(state.vehicles.length===0) return '<div class="empty-state" style="margin-top:16px;">Brak pojazdów — dodaj pierwszy w zakładce "+ Dodaj auto"</div>';
+  const mKey = monthKey(todayISO());
+  let sumDist=0, sumLiters=0, sumFuel=0, sumOther=0;
+  let cards = '';
+  state.vehicles.forEach(v=>{
+    const ms = monthSummary(v.id, mKey);
+    sumDist+=ms.distance; sumLiters+=ms.litersUsed; sumFuel+=ms.fuelCost; sumOther+=ms.otherCost;
+    cards += `
+      <div class="fleet-card">
+        <div class="fc-top">
+          <div class="fc-name">🚐 ${esc(v.name)}</div>
+          <span class="cat-pill">${ms.consumption===null?'—':n(ms.consumption,2)+' l/100'}</span>
+        </div>
+        <div class="fc-metrics">
+          <div><div class="fm-label">Km</div><div class="fm-value">${n(ms.distance,0)}</div></div>
+          <div><div class="fm-label">Paliwo</div><div class="fm-value">${n(ms.litersUsed,1)} l</div></div>
+          <div><div class="fm-label">Paliwo zł</div><div class="fm-value">${n(ms.fuelCost,0)}</div></div>
+          <div><div class="fm-label">Łącznie</div><div class="fm-value">${n(ms.total,0)}</div></div>
+        </div>
+      </div>`;
+  });
+  const fleetAvg = sumDist>0 ? sumLiters/sumDist*100 : null;
+  return `
+    <div class="section" style="margin-top:14px;">
+      <div class="section-head"><h2>Zestawienie floty — ${fmtMonth(mKey)}</h2></div>
+      ${cards}
+      <div class="fleet-total">
+        <h3>Cała flota</h3>
+        <div class="grid-summary">
+          <div class="tile"><div class="t-label">Suma km</div><div class="t-value">${n(sumDist,0)}</div></div>
+          <div class="tile"><div class="t-label">Suma paliwa</div><div class="t-value">${n(sumLiters,1)} l</div></div>
+          <div class="tile"><div class="t-label">Śr. spalanie floty</div><div class="t-value green">${fleetAvg===null?'—':n(fleetAvg,2)+' l/100km'}</div></div>
+          <div class="tile"><div class="t-label">Koszt łączny</div><div class="t-value red">${n(sumFuel+sumOther,0)} zł</div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderAddVehicle(){
+  return `
+    <div class="add-vehicle-box">
+      Dodaj nowy pojazd do floty — będzie miał własną, identyczną strukturę jak pozostałe auta, a jego dane automatycznie wejdą do zestawienia we Flocie.
+      <div><input id="newVehicleName" placeholder="np. Fiat Ducato"></div>
+      <button onclick="addVehicle()">+ Dodaj pojazd</button>
+    </div>`;
+}
+
+/* ---- wykres ---- */
+function renderChart(vehicleId, period){
+  const series = trendSeries(vehicleId, period).filter(p=>p.consumption!=null);
+  if(series.length < 2){
+    return '<div class="chart-empty">Za mało danych do wykresu — dodaj co najmniej dwa tankowania.</div>';
+  }
+  const svgId = 'chart-' + vehicleId;
+  setTimeout(()=>drawChart(svgId, series), 0);
+  return `<svg id="${svgId}" viewBox="0 0 300 130" width="100%" height="130"></svg>
+    <div class="chart-legend"><span><i style="background:var(--amber)"></i>Spalanie l/100km</span><span><i style="background:var(--blue)"></i>Koszt zł/100km</span></div>`;
+}
+
+function drawChart(svgId, d){
+  const svg = document.getElementById(svgId);
+  if(!svg) return;
+  const W=300,H=130,padL=28,padR=8,padT=10,padB=20;
+  const spalanie = d.map(p=>p.consumption), koszt = d.map(p=>p.costPer100);
+  const sMax = Math.max(...spalanie)+0.6, sMin = Math.min(0,Math.min(...spalanie)-0.6);
+  const kMax = Math.max(...koszt)+8, kMin = Math.min(0,Math.min(...koszt)-8);
+  const nPts = d.length;
+  const x = i => padL + (W-padL-padR) * (nPts===1?0:(i/(nPts-1)));
+  const ys = v => padT + (H-padT-padB) * (1 - (v-sMin)/(sMax-sMin));
+  const yk = v => padT + (H-padT-padB) * (1 - (v-kMin)/(kMax-kMin));
+
+  let svgHtml = '';
+  [0,0.5,1].forEach(f=>{ const gy = padT + (H-padT-padB)*f; svgHtml += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#2c3841" stroke-width="1"/>`; });
+
+  const sPath = spalanie.map((v,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ' ' + ys(v).toFixed(1)).join(' ');
+  const kPath = koszt.map((v,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ' ' + yk(v).toFixed(1)).join(' ');
+  svgHtml += `<path d="${sPath}" fill="none" stroke="#e8a33d" stroke-width="2.2"/>`;
+  svgHtml += `<path d="${kPath}" fill="none" stroke="#5b9bd5" stroke-width="2.2" stroke-dasharray="3 3"/>`;
+  spalanie.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${ys(v)}" r="${i===nPts-1?3.6:2.4}" fill="#e8a33d"/>`; });
+  koszt.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${yk(v)}" r="${i===nPts-1?3.2:2}" fill="#5b9bd5"/>`; });
+  svgHtml += `<text x="${x(nPts-1)-2}" y="${ys(spalanie[nPts-1])-8}" font-size="9" fill="#e8a33d" font-family="JetBrains Mono" text-anchor="end">${spalanie[nPts-1].toFixed(2)}</text>`;
+  d.forEach((p,i)=>{ svgHtml += `<text x="${x(i)}" y="${H-4}" font-size="8" fill="#8fa0ab" font-family="Public Sans" text-anchor="middle">${esc(p.label)}</text>`; });
+  svg.innerHTML = svgHtml;
+}
+
+function shiftMonth(vehicleId, dir){
+  const ui = uiState[vehicleId];
+  let [y,m] = ui.month.split('-').map(Number);
+  m += dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  ui.month = `${y}-${pad(m)}`;
+  renderContent();
+}
+function setPeriod(vehicleId, period){ uiState[vehicleId].period = period; renderContent(); }
+
+/* ====================== ZARZĄDZANIE POJAZDAMI ====================== */
+function addVehicle(){
+  const input = document.getElementById('newVehicleName');
+  const name = (input.value||'').trim();
+  if(!name){ input.focus(); return; }
+  const v = { id: uid(), name };
+  state.vehicles.push(v);
+  saveState();
+  activeTab = v.id;
+  render();
+  showToast('Dodano pojazd: ' + name);
+}
+function renameVehicle(vehicleId){
+  const v = vehicleById(vehicleId);
+  const name = prompt('Nowa nazwa pojazdu:', v.name);
+  if(name===null) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+  v.name = trimmed;
+  saveState(); render();
+}
+function deleteVehicle(vehicleId){
+  const v = vehicleById(vehicleId);
+  if(!confirm(`Usunąć pojazd "${v.name}" wraz z całą jego historią tankowań i kosztów? Tej operacji nie da się cofnąć.`)) return;
+  state.vehicles = state.vehicles.filter(x=>x.id!==vehicleId);
+  state.fillups = state.fillups.filter(f=>f.vehicleId!==vehicleId);
+  state.costs = state.costs.filter(c=>c.vehicleId!==vehicleId);
+  delete uiState[vehicleId];
+  activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+  saveState(); render();
+  showToast('Usunięto pojazd');
+}
+
+/* ====================== FORMULARZ TANKOWANIA ====================== */
+function calcFromLitryCena(){
+  const l = parseFloat(document.getElementById('f-litry').value);
+  const c = parseFloat(document.getElementById('f-cena').value);
+  if(!isNaN(l) && !isNaN(c)) document.getElementById('f-koszt').value = (l*c).toFixed(2);
+}
+function calcFromKoszt(){
+  const l = parseFloat(document.getElementById('f-litry').value);
+  const k = parseFloat(document.getElementById('f-koszt').value);
+  if(!isNaN(l) && l>0 && !isNaN(k)) document.getElementById('f-cena').value = (k/l).toFixed(2);
+}
+
+function resetFillupSheet(){
+  editingFillupId = null;
+  document.getElementById('sheet-title').textContent = 'Nowe tankowanie — ' + (vehicleById(activeTab)?.name||'');
+  document.querySelector('#overlay .btn-save').textContent = 'Zapisz tankowanie';
+  document.getElementById('photoReview').classList.remove('show');
+  document.getElementById('photoImg').src='';
+  document.getElementById('scanZoneLabel').textContent = 'Wybierz zdjęcie paragonu / licznika';
+  ['fld-litry','fld-cena','fld-koszt','fld-przebieg'].forEach(id=>{
+    const f = document.getElementById(id);
+    f.classList.remove('autofilled');
+    const tag = f.querySelector('.autofilled-tag'); if(tag) tag.remove();
+  });
+  document.getElementById('f-error').classList.remove('show');
+  ['f-przebieg','f-litry','f-cena','f-koszt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-data').value = todayISO();
+}
+function openFillupSheet(){ if(!vehicleById(activeTab)) return; resetFillupSheet(); document.getElementById('overlay').classList.add('open'); }
+function closeSheet(){ document.getElementById('overlay').classList.remove('open'); }
+
+function editFillup(id){
+  const f = state.fillups.find(x=>x.id===id);
+  resetFillupSheet();
+  editingFillupId = id;
+  document.getElementById('sheet-title').textContent = 'Edytuj tankowanie';
+  document.querySelector('#overlay .btn-save').textContent = 'Zapisz zmiany';
+  document.getElementById('f-data').value = f.date;
+  document.getElementById('f-przebieg').value = f.odo;
+  document.getElementById('f-litry').value = f.liters;
+  document.getElementById('f-cena').value = f.pricePerLiter;
+  document.getElementById('f-koszt').value = f.totalCost;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function saveFillup(){
+  const date = document.getElementById('f-data').value;
+  const odo = parseFloat(document.getElementById('f-przebieg').value);
+  const liters = parseFloat(document.getElementById('f-litry').value);
+  const pricePerLiter = parseFloat(document.getElementById('f-cena').value);
+  const totalCost = parseFloat(document.getElementById('f-koszt').value);
+  const err = document.getElementById('f-error');
+  if(!date || isNaN(odo) || isNaN(liters) || isNaN(pricePerLiter) || isNaN(totalCost)){
+    err.textContent = 'Uzupełnij wszystkie pola liczbami.'; err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  if(editingFillupId){
+    const f = state.fillups.find(x=>x.id===editingFillupId);
+    Object.assign(f, { date, odo, liters, pricePerLiter, totalCost });
+  } else {
+    state.fillups.push({ id: uid(), vehicleId: activeTab, date, odo, liters, pricePerLiter, totalCost });
+  }
+  saveState(); closeSheet(); renderContent();
+  showToast(editingFillupId ? 'Zapisano zmiany' : 'Zapisano tankowanie');
+}
+
+function deleteFillup(id){
+  if(!confirm('Usunąć to tankowanie? Tej operacji nie da się cofnąć.')) return;
+  state.fillups = state.fillups.filter(f=>f.id!==id);
+  saveState(); renderContent();
+  showToast('Usunięto tankowanie');
+}
+
+/* ====================== FORMULARZ KOSZTU ====================== */
+function lastOdoFor(vehicleId){
+  const fs = fillupsFor(vehicleId);
+  return fs.length ? fs[fs.length-1].odo : '';
+}
+function resetCostSheet(){
+  editingCostId = null;
+  document.getElementById('cost-sheet-title').textContent = 'Nowy koszt — ' + (vehicleById(activeTab)?.name||'');
+  document.querySelector('#overlay-koszt .btn-save').textContent = 'Zapisz koszt';
+  document.getElementById('c-data').value = todayISO();
+  document.getElementById('c-przebieg').value = lastOdoFor(activeTab);
+  document.getElementById('c-hint').style.display = '';
+  document.getElementById('c-kategoria').selectedIndex = 0;
+  document.getElementById('c-kwota').value = '';
+  document.getElementById('c-notatka').value = '';
+  document.getElementById('c-error').classList.remove('show');
+}
+function openCostSheet(){ if(!vehicleById(activeTab)) return; resetCostSheet(); document.getElementById('overlay-koszt').classList.add('open'); }
+function closeCostSheet(){ document.getElementById('overlay-koszt').classList.remove('open'); }
+
+function editCost(id){
+  const c = state.costs.find(x=>x.id===id);
+  resetCostSheet();
+  editingCostId = id;
+  document.getElementById('cost-sheet-title').textContent = 'Edytuj koszt';
+  document.querySelector('#overlay-koszt .btn-save').textContent = 'Zapisz zmiany';
+  document.getElementById('c-data').value = c.date;
+  document.getElementById('c-przebieg').value = c.odo;
+  document.getElementById('c-hint').style.display = 'none';
+  document.getElementById('c-kategoria').value = c.category;
+  document.getElementById('c-kwota').value = c.amount;
+  document.getElementById('c-notatka').value = c.note||'';
+  document.getElementById('overlay-koszt').classList.add('open');
+}
+
+function saveCost(){
+  const date = document.getElementById('c-data').value;
+  const odo = parseFloat(document.getElementById('c-przebieg').value);
+  const category = document.getElementById('c-kategoria').value;
+  const amount = parseFloat(document.getElementById('c-kwota').value);
+  const note = document.getElementById('c-notatka').value.trim();
+  const err = document.getElementById('c-error');
+  if(!date || isNaN(odo) || isNaN(amount)){
+    err.textContent = 'Uzupełnij datę, przebieg i kwotę.'; err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  if(editingCostId){
+    const c = state.costs.find(x=>x.id===editingCostId);
+    Object.assign(c, { date, odo, category, amount, note });
+  } else {
+    state.costs.push({ id: uid(), vehicleId: activeTab, date, odo, category, amount, note });
+  }
+  saveState(); closeCostSheet(); renderContent();
+  showToast(editingCostId ? 'Zapisano zmiany' : 'Zapisano koszt');
+}
+
+function deleteCost(id){
+  if(!confirm('Usunąć ten koszt? Tej operacji nie da się cofnąć.')) return;
+  state.costs = state.costs.filter(c=>c.id!==id);
+  saveState(); renderContent();
+  showToast('Usunięto koszt');
+}
+
+/* ====================== SKANOWANIE ZDJĘCIA (Gemini przez Apps Script) ====================== */
+function onPhotoPicked(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  document.getElementById('photoImg').src = url;
+  document.getElementById('photoReview').classList.add('show');
+  zoomReset();
+
+  if(!GAS_URL){
+    showToast('Backend jeszcze niepodłączony (GAS_URL) — nie mogę odczytać zdjęcia. Uzupełnij pola ręcznie.', true);
+    return;
+  }
+  const zoneLabel = document.getElementById('scanZoneLabel');
+  document.getElementById('scanZone').classList.add('busy');
+  zoneLabel.textContent = 'Odczytuję zdjęcie (Gemini)...';
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result;
+    const base64 = dataUrl.split(',')[1];
+    try{
+      const res = await fetch(GAS_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'ocr', mimeType:file.type, dataBase64:base64 })
+      });
+      const json = await res.json();
+      document.getElementById('scanZone').classList.remove('busy');
+      zoneLabel.textContent = 'Wybierz inne zdjęcie';
+      if(json.ok && json.data){
+        applyOcrData(json.data);
+        showToast('Odczytano dane ze zdjęcia — porównaj ze zdjęciem przed zapisem');
+      } else {
+        showToast('Nie udało się odczytać zdjęcia: ' + (json.error||'nieznany błąd'), true);
+      }
+    }catch(e){
+      document.getElementById('scanZone').classList.remove('busy');
+      zoneLabel.textContent = 'Wybierz inne zdjęcie';
+      showToast('Błąd połączenia z serwerem odczytu', true);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyOcrData(data){
+  const map = { liters:'f-litry', pricePerLiter:'f-cena', totalCost:'f-koszt', odometerKm:'f-przebieg' };
+  const fldMap = { liters:'fld-litry', pricePerLiter:'fld-cena', totalCost:'fld-koszt', odometerKm:'fld-przebieg' };
+  Object.keys(map).forEach(k=>{
+    if(data[k]!=null && data[k]!==''){
+      document.getElementById(map[k]).value = data[k];
+      const f = document.getElementById(fldMap[k]);
+      f.classList.add('autofilled');
+      if(!f.querySelector('.autofilled-tag')) f.querySelector('label').insertAdjacentHTML('beforeend','<span class="autofilled-tag">ze zdjęcia — sprawdź</span>');
+    }
+  });
+}
+
+/* pinch-zoom / pan / wheel-zoom do weryfikacji zdjęcia */
+let pzScale=1, pzX=0, pzY=0, pzStartDist=0, pzStartScale=1;
+let pzDragging=false, pzLastX=0, pzLastY=0;
+function pzClamp(){
+  const box = document.getElementById('photoReview');
+  const maxX = (box.clientWidth * (pzScale-1)) / 2;
+  const maxY = (box.clientHeight * (pzScale-1)) / 2;
+  pzX = Math.max(-maxX, Math.min(maxX, pzX));
+  pzY = Math.max(-maxY, Math.min(maxY, pzY));
+}
+function pzApply(){ pzClamp(); document.getElementById('photoImg').style.transform = `translate(${pzX}px,${pzY}px) scale(${pzScale})`; }
+function zoomReset(){ pzScale=1; pzX=0; pzY=0; pzApply(); }
+function zoomBy(d){ pzScale = Math.min(4, Math.max(1, +(pzScale+d).toFixed(2))); if(pzScale===1){pzX=0;pzY=0;} pzApply(); }
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const pRev = document.getElementById('photoReview');
+  pRev.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      pzStartDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pzStartScale = pzScale;
+    } else if(e.touches.length===1){
+      pzDragging=true; pzLastX=e.touches[0].clientX; pzLastY=e.touches[0].clientY;
+    }
+  }, {passive:true});
+  pRev.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    if(e.touches.length===2 && pzStartDist){
+      const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pzScale = Math.min(4, Math.max(1, pzStartScale * (dist/pzStartDist)));
+      pzApply();
+    } else if(pzDragging && e.touches.length===1 && pzScale>1){
+      pzX += e.touches[0].clientX - pzLastX; pzY += e.touches[0].clientY - pzLastY;
+      pzLastX = e.touches[0].clientX; pzLastY = e.touches[0].clientY;
+      pzApply();
+    }
+  }, {passive:false});
+  pRev.addEventListener('touchend', ()=>{ pzDragging=false; pzStartDist=0; if(pzScale===1){pzX=0;pzY=0;pzApply();} });
+  pRev.addEventListener('mousedown', e=>{ if(pzScale<=1) return; pzDragging=true; pzLastX=e.clientX; pzLastY=e.clientY; pRev.classList.add('dragging'); });
+  window.addEventListener('mousemove', e=>{ if(!pzDragging) return; pzX += e.clientX-pzLastX; pzY += e.clientY-pzLastY; pzLastX=e.clientX; pzLastY=e.clientY; pzApply(); });
+  window.addEventListener('mouseup', ()=>{ pzDragging=false; pRev.classList.remove('dragging'); });
+  pRev.addEventListener('wheel', e=>{ e.preventDefault(); zoomBy(e.deltaY<0?0.25:-0.25); }, {passive:false});
+  pRev.addEventListener('dblclick', ()=> pzScale>1 ? zoomReset() : zoomBy(1.5));
+
+  document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
+  document.getElementById('overlay-koszt').addEventListener('click', e=>{ if(e.target.id==='overlay-koszt') closeCostSheet(); });
+
+  render();
+  loadRemoteOnStart();
+});
+
+/* ====================== TOAST ====================== */
+let toastTimer;
+function showToast(msg, isErr){
+  const t = document.getElementById('toast');
+  document.getElementById('toast-text').textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 3200);
+}
+</script>
