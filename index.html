@@ -119,6 +119,12 @@
   .chart-legend span{display:flex; align-items:center; gap:5px;}
   .chart-legend i{width:9px;height:9px;border-radius:2px;display:inline-block;}
   .chart-empty{font-size:.8rem; color:var(--ink-dim); padding:20px 4px; text-align:center;}
+  .chart-pager{position:relative; touch-action:pan-y;}
+  .chart-page{display:none;}
+  .chart-page.active{display:block;}
+  .chart-dots{display:flex; justify-content:center; gap:6px; margin-top:8px;}
+  .chart-dots .dot{width:7px; height:7px; border-radius:50%; border:none; background:var(--line); padding:0; cursor:pointer;}
+  .chart-dots .dot.active{background:var(--amber);}
 
   .entry{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:8px; overflow:hidden;}
   .entry-head{display:flex; align-items:center; justify-content:space-between; padding:12px 13px; cursor:pointer; gap:8px;}
@@ -422,16 +428,22 @@ function costsFor(vehicleId){
   return state.costs.filter(c=>c.vehicleId===vehicleId).slice().sort((a,b)=> a.date.localeCompare(b.date));
 }
 
-// Zwraca listę { fillup, distance, consumption, costPer100, isBaseline } w kolejności chronologicznej.
+// Zwraca listę { fillup, distance, consumption, costPer100, totalCostPer100, isBaseline }
+// w kolejności chronologicznej. costPer100 liczy tylko paliwo tego tankowania;
+// totalCostPer100 dolicza też "inne koszty" wpisane między poprzednim a tym
+// tankowaniem (np. naprawę w trakcie tego samego odcinka trasy).
 function intervalsFor(vehicleId){
   const fs = fillupsFor(vehicleId);
+  const costs = costsFor(vehicleId);
   return fs.map((f,i)=>{
-    if(i===0) return { fillup:f, distance:null, consumption:null, costPer100:null, isBaseline:true };
+    if(i===0) return { fillup:f, distance:null, consumption:null, costPer100:null, totalCostPer100:null, isBaseline:true };
     const prev = fs[i-1];
     const distance = f.odo - prev.odo;
     const consumption = distance>0 ? (f.liters/distance*100) : null;
     const costPer100 = distance>0 ? (f.totalCost/distance*100) : null;
-    return { fillup:f, distance, consumption, costPer100, isBaseline:false };
+    const otherInInterval = costs.filter(c=>c.date>prev.date && c.date<=f.date).reduce((s,c)=>s+c.amount,0);
+    const totalCostPer100 = distance>0 ? (f.totalCost+otherInInterval)/distance*100 : null;
+    return { fillup:f, distance, consumption, costPer100, totalCostPer100, isBaseline:false };
   });
 }
 
@@ -473,14 +485,24 @@ function isoWeekLabel(iso){
 function trendSeries(vehicleId, period){
   const ivs = intervalsFor(vehicleId).filter(iv=>!iv.isBaseline);
   if(period==='dzien'){
-    return ivs.map(iv=>({ label: fmtDateShort(iv.fillup.date).replace(/ \d{4}$/,''), consumption: iv.consumption, costPer100: iv.costPer100 }));
+    return ivs.map(iv=>({
+      label: fmtDateShort(iv.fillup.date).replace(/ \d{4}$/,''),
+      consumption: iv.consumption, costPer100: iv.costPer100, totalCostPer100: iv.totalCostPer100,
+    }));
   }
-  const groupKey = period==='tydzien' ? (iv=>isoWeekLabel(iv.fillup.date)) : (iv=>monthKey(iv.fillup.date));
+  const groupKeyFn = period==='tydzien' ? isoWeekLabel : monthKey;
   const groups = {};
   ivs.forEach(iv=>{
-    const k = groupKey(iv);
-    if(!groups[k]) groups[k] = {liters:0, distance:0, cost:0};
+    const k = groupKeyFn(iv.fillup.date);
+    if(!groups[k]) groups[k] = {liters:0, distance:0, cost:0, otherCost:0};
     groups[k].liters += iv.fillup.liters; groups[k].distance += iv.distance; groups[k].cost += iv.fillup.totalCost;
+  });
+  // Inne koszty dopisujemy tylko do okresów, w których jest już jakieś
+  // tankowanie (czyli mamy dystans, do którego je odnieść) -- reszta i tak
+  // jest widoczna w podsumowaniu miesięcznym.
+  costsFor(vehicleId).forEach(c=>{
+    const k = groupKeyFn(c.date);
+    if(groups[k]) groups[k].otherCost += c.amount;
   });
   return Object.keys(groups).sort().map(k=>{
     const g = groups[k];
@@ -488,6 +510,7 @@ function trendSeries(vehicleId, period){
       label: period==='miesiac' ? k.slice(5)+'/'+k.slice(2,4) : k,
       consumption: g.distance>0 ? g.liters/g.distance*100 : null,
       costPer100: g.distance>0 ? g.cost/g.distance*100 : null,
+      totalCostPer100: g.distance>0 ? (g.cost+g.otherCost)/g.distance*100 : null,
     };
   });
 }
@@ -702,21 +725,73 @@ function renderAddVehicle(){
 }
 
 /* ---- wykres ---- */
+// Spalanie i koszt mają zupełnie różne jednostki (l/100km vs zł/100km), więc
+// zamiast jednego wykresu z dwiema nałożonymi liniami (co przy niewielu
+// punktach zawsze wygląda jak "ta sama" linia) -- dwa osobne wykresy jako
+// przełączane strony: kropki pod spodem albo przesunięcie palcem w bok.
+// Strona kosztu sama sprawdza aktualne ustawienie przełącznika
+// paliwo/całkowity (ui.costMode) i rysuje odpowiednią serię.
 function renderChart(vehicleId, period){
-  const series = trendSeries(vehicleId, period).filter(p=>p.consumption!=null);
-  if(series.length < 2){
-    return '<div class="chart-empty">Za mało danych do wykresu — dodaj co najmniej dwa tankowania.</div>';
-  }
-  const svgId = 'chart-' + vehicleId;
-  setTimeout(()=>drawChart(svgId, series), 0);
-  return `<svg id="${svgId}" viewBox="0 0 300 130" width="100%" height="130"></svg>
-    <div class="chart-legend"><span><i style="background:var(--amber)"></i>Spalanie l/100km</span><span><i style="background:var(--blue)"></i>Koszt zł/100km</span></div>`;
+  const ui = uiState[vehicleId];
+  if(!ui.chartPage) ui.chartPage = 'spalanie';
+  const costMode = ui.costMode || 'total';
+  const kosztKey = costMode==='paliwo' ? 'costPer100' : 'totalCostPer100';
+  const kosztLabel = costMode==='paliwo' ? 'Koszt paliwa zł/100km' : 'Koszt całkowity zł/100km';
+
+  const series = trendSeries(vehicleId, period);
+  const spalaniePts = series.filter(p=>p.consumption!=null);
+  const kosztPts = series.filter(p=>p[kosztKey]!=null);
+  const svgIdS = 'chart-s-' + vehicleId;
+  const svgIdK = 'chart-k-' + vehicleId;
+
+  setTimeout(()=>{
+    if(spalaniePts.length>=2) drawSingleChart(svgIdS, spalaniePts, 'consumption', '#e8a33d', 2);
+    if(kosztPts.length>=2) drawSingleChart(svgIdK, kosztPts, kosztKey, '#5b9bd5', 0);
+    attachChartSwipe(vehicleId);
+  }, 0);
+
+  const emptyMsg = '<div class="chart-empty">Za mało danych do wykresu — dodaj co najmniej dwa tankowania.</div>';
+  return `
+    <div class="chart-pager" id="pager-${vehicleId}">
+      <div class="chart-page ${ui.chartPage==='spalanie'?'active':''}">
+        ${spalaniePts.length<2 ? emptyMsg : `<svg id="${svgIdS}" viewBox="0 0 300 130" width="100%" height="130"></svg>`}
+        <div class="chart-legend"><span><i style="background:var(--amber)"></i>Spalanie l/100km</span></div>
+      </div>
+      <div class="chart-page ${ui.chartPage==='koszt'?'active':''}">
+        ${kosztPts.length<2 ? emptyMsg : `<svg id="${svgIdK}" viewBox="0 0 300 130" width="100%" height="130"></svg>`}
+        <div class="chart-legend"><span><i style="background:var(--blue)"></i>${kosztLabel}</span></div>
+      </div>
+    </div>
+    <div class="chart-dots">
+      <button class="dot ${ui.chartPage==='spalanie'?'active':''}" onclick="setChartPage('${vehicleId}','spalanie')" aria-label="Spalanie"></button>
+      <button class="dot ${ui.chartPage==='koszt'?'active':''}" onclick="setChartPage('${vehicleId}','koszt')" aria-label="Koszt"></button>
+    </div>`;
+}
+
+function setChartPage(vehicleId, page){
+  uiState[vehicleId].chartPage = page;
+  renderContent();
+}
+
+function attachChartSwipe(vehicleId){
+  const pager = document.getElementById('pager-'+vehicleId);
+  if(!pager || pager.dataset.swipeBound) return;
+  pager.dataset.swipeBound = '1';
+  let startX = 0, startY = 0;
+  pager.addEventListener('touchstart', e=>{
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+  }, {passive:true});
+  pager.addEventListener('touchend', e=>{
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if(Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)*1.5) return;
+    setChartPage(vehicleId, dx>0 ? 'koszt' : 'spalanie');
+  }, {passive:true});
 }
 
 // Każda seria dostaje własną skalę dopasowaną TYLKO do jej realnego zakresu
-// (bez sztucznego wymuszania zera jako minimum) -- inaczej dwie serie o
-// zupełnie różnych jednostkach (l/100km vs zł/100km) wizualnie "nakładają
-// się" 1:1, bo obie są ściśnięte pod tą samą, niepotrzebnie szeroką skalę.
+// (bez sztucznego wymuszania zera jako minimum) -- przy niewielu punktach
+// wymuszanie zera ściska prawdziwą zmienność w wąski pasek u góry wykresu.
 function niceRange(values){
   const max = Math.max(...values), min = Math.min(...values);
   const span = max - min;
@@ -724,29 +799,23 @@ function niceRange(values){
   return { min: min-pad, max: max+pad };
 }
 
-function drawChart(svgId, d){
+function drawSingleChart(svgId, points, key, color, decimals){
   const svg = document.getElementById(svgId);
   if(!svg) return;
   const W=300,H=130,padL=28,padR=8,padT=10,padB=20;
-  const spalanie = d.map(p=>p.consumption), koszt = d.map(p=>p.costPer100);
-  const sR = niceRange(spalanie), kR = niceRange(koszt);
-  const nPts = d.length;
+  const values = points.map(p=>p[key]);
+  const r = niceRange(values);
+  const nPts = values.length;
   const x = i => padL + (W-padL-padR) * (nPts===1?0:(i/(nPts-1)));
-  const ys = v => padT + (H-padT-padB) * (1 - (v-sR.min)/(sR.max-sR.min));
-  const yk = v => padT + (H-padT-padB) * (1 - (v-kR.min)/(kR.max-kR.min));
+  const y = v => padT + (H-padT-padB) * (1 - (v-r.min)/(r.max-r.min));
 
   let svgHtml = '';
   [0,0.5,1].forEach(f=>{ const gy = padT + (H-padT-padB)*f; svgHtml += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#2c3841" stroke-width="1"/>`; });
-
-  const sPath = spalanie.map((v,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ' ' + ys(v).toFixed(1)).join(' ');
-  const kPath = koszt.map((v,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ' ' + yk(v).toFixed(1)).join(' ');
-  svgHtml += `<path d="${sPath}" fill="none" stroke="#e8a33d" stroke-width="2.2"/>`;
-  svgHtml += `<path d="${kPath}" fill="none" stroke="#5b9bd5" stroke-width="2.2" stroke-dasharray="3 3"/>`;
-  spalanie.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${ys(v)}" r="${i===nPts-1?3.6:2.4}" fill="#e8a33d"/>`; });
-  koszt.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${yk(v)}" r="${i===nPts-1?3.2:2}" fill="#5b9bd5"/>`; });
-  svgHtml += `<text x="${x(nPts-1)-2}" y="${ys(spalanie[nPts-1])-8}" font-size="9" fill="#e8a33d" font-family="JetBrains Mono" text-anchor="end">${spalanie[nPts-1].toFixed(2)}</text>`;
-  svgHtml += `<text x="${x(nPts-1)-2}" y="${yk(koszt[nPts-1])-8}" font-size="9" fill="#5b9bd5" font-family="JetBrains Mono" text-anchor="end">${koszt[nPts-1].toFixed(0)}</text>`;
-  d.forEach((p,i)=>{ svgHtml += `<text x="${x(i)}" y="${H-4}" font-size="8" fill="#8fa0ab" font-family="Public Sans" text-anchor="middle">${esc(p.label)}</text>`; });
+  const path = values.map((v,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+  svgHtml += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2.2"/>`;
+  values.forEach((v,i)=>{ svgHtml += `<circle cx="${x(i)}" cy="${y(v)}" r="${i===nPts-1?3.6:2.4}" fill="${color}"/>`; });
+  svgHtml += `<text x="${x(nPts-1)-2}" y="${y(values[nPts-1])-8}" font-size="9" fill="${color}" font-family="JetBrains Mono" text-anchor="end">${values[nPts-1].toFixed(decimals)}</text>`;
+  points.forEach((p,i)=>{ svgHtml += `<text x="${x(i)}" y="${H-4}" font-size="8" fill="#8fa0ab" font-family="Public Sans" text-anchor="middle">${esc(p.label)}</text>`; });
   svg.innerHTML = svgHtml;
 }
 
