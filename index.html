@@ -168,20 +168,32 @@
   .autofilled-tag{font-size:.62rem; color:var(--blue); margin-left:6px; font-weight:600;}
   .field.autofilled input, .field.autofilled select{border-color:var(--blue);}
 
-  .scan-zone{border:1px dashed var(--blue); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:16px; background:rgba(91,155,213,.06);}
-  .scan-zone .icon{font-size:1.3rem;}
+  .scan-zone{border:1px dashed var(--blue); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px; background:rgba(91,155,213,.06);}
+  .scan-zone .icon{font-size:1.3rem; flex:0 0 auto; width:24px; text-align:center;}
   .scan-zone .txt{display:flex; flex-direction:column;}
   .scan-zone .txt b{font-size:.83rem; color:var(--ink);}
   .scan-zone .txt span{font-size:.7rem; color:var(--ink-dim);}
-  .scan-zone.busy{opacity:.6; pointer-events:none;}
+  .scan-zone.busy{background:rgba(91,155,213,.12);}
 
-  .photo-review{position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line); background:#05080a; height:240px; touch-action:none; margin-bottom:10px; display:none; cursor:grab;}
+  .spinner{width:20px; height:20px; border-radius:50%; border:3px solid rgba(91,155,213,.25); border-top-color:var(--blue); animation:spin .8s linear infinite; flex:0 0 auto;}
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* mała statyczna miniatura w formularzu -- właściwe przybliżanie/przesuwanie dzieje się w #lightbox */
+  .photo-review{position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line); background:#05080a; height:110px; margin-bottom:16px; display:none; cursor:pointer;}
   .photo-review.show{display:block;}
-  .photo-review.dragging{cursor:grabbing;}
-  .photo-review img{position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; transform-origin:center center; will-change:transform; user-select:none; -webkit-user-drag:none; pointer-events:none;}
-  .photo-review .zoom-ctrl{position:absolute; right:8px; bottom:8px; display:flex; gap:6px; z-index:2;}
-  .photo-review .zoom-ctrl button{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:rgba(18,24,29,.85); color:var(--ink); font-size:1rem; cursor:pointer;}
+  .photo-review img{position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; pointer-events:none;}
   .photo-review .verify-badge{position:absolute; left:8px; top:8px; background:rgba(18,24,29,.85); border:1px solid var(--line); color:var(--ink-dim); font-size:.65rem; padding:3px 8px; border-radius:999px; z-index:2;}
+
+  .lightbox{position:fixed; inset:0; background:#000; z-index:50; display:none; flex-direction:column; touch-action:none;}
+  .lightbox.open{display:flex;}
+  .lightbox-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px; flex:0 0 auto;}
+  .lightbox-status{display:flex; align-items:center; gap:8px; color:var(--ink-dim); font-size:.8rem; min-width:0;}
+  .lightbox-close{background:var(--panel2); border:1px solid var(--line); color:var(--ink); font-weight:700; padding:9px 16px; border-radius:999px; font-size:.85rem; cursor:pointer; flex:0 0 auto;}
+  .lightbox-stage{position:relative; flex:1; overflow:hidden; cursor:grab;}
+  .lightbox-stage.dragging{cursor:grabbing;}
+  .lightbox-stage img{position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; transform-origin:center center; will-change:transform; user-select:none; -webkit-user-drag:none; pointer-events:none;}
+  .lightbox-zoom-ctrl{position:absolute; right:16px; bottom:24px; display:flex; gap:8px; z-index:2;}
+  .lightbox-zoom-ctrl button{width:46px; height:46px; border-radius:12px; border:1px solid var(--line); background:rgba(27,35,42,.9); color:var(--ink); font-size:1.3rem; cursor:pointer;}
 
   .entry-actions{grid-column:1/-1; display:flex; gap:8px; margin-top:2px; padding-top:10px; border-top:1px solid var(--line);}
   .entry-actions button{flex:1; padding:8px; border-radius:8px; font-size:.78rem; font-weight:600; cursor:pointer; background:var(--panel2); border:1px solid var(--line); color:var(--ink-dim);}
@@ -221,32 +233,22 @@
     <div class="field" id="fld-data"><label for="f-data">Data</label><input id="f-data" type="date"></div>
 
     <div class="scan-zone" id="scanZoneB" onclick="document.getElementById('photoInputB').click()">
-      <span class="icon">📏</span>
+      <span class="icon" id="scanIconB">📏</span>
       <div class="txt"><b id="scanZoneLabelB">Zdjęcie licznika (przebieg)</b><span>Z galerii — uzupełni pole "Przebieg" poniżej</span></div>
     </div>
-    <div class="photo-review" id="photoReviewB" data-target="B">
-      <span class="verify-badge">Porównaj ze zdjęciem →</span>
+    <div class="photo-review" id="photoReviewB" onclick="openLightbox('B')">
+      <span class="verify-badge">Stuknij, by powiększyć →</span>
       <img id="photoImgB" src="" alt="Podgląd zdjęcia licznika">
-      <div class="zoom-ctrl">
-        <button type="button" onclick="zoomBy('B',-0.3)">−</button>
-        <button type="button" onclick="zoomBy('B',0.3)">+</button>
-        <button type="button" onclick="zoomReset('B')">⟲</button>
-      </div>
     </div>
     <div class="field" id="fld-przebieg"><label for="f-przebieg">Przebieg (km)</label><input id="f-przebieg" type="number" placeholder="np. 347560"></div>
 
     <div class="scan-zone" id="scanZoneA" onclick="document.getElementById('photoInputA').click()">
-      <span class="icon">📷</span>
+      <span class="icon" id="scanIconA">📷</span>
       <div class="txt"><b id="scanZoneLabelA">Zdjęcie dystrybutora (litry, cena, koszt)</b><span>Z galerii — uzupełni pola paliwa poniżej</span></div>
     </div>
-    <div class="photo-review" id="photoReviewA" data-target="A">
-      <span class="verify-badge">Porównaj ze zdjęciem →</span>
+    <div class="photo-review" id="photoReviewA" onclick="openLightbox('A')">
+      <span class="verify-badge">Stuknij, by powiększyć →</span>
       <img id="photoImgA" src="" alt="Podgląd zdjęcia dystrybutora">
-      <div class="zoom-ctrl">
-        <button type="button" onclick="zoomBy('A',-0.3)">−</button>
-        <button type="button" onclick="zoomBy('A',0.3)">+</button>
-        <button type="button" onclick="zoomReset('A')">⟲</button>
-      </div>
     </div>
     <div class="row2">
       <div class="field" id="fld-litry"><label for="f-litry">Paliwo (l)</label><input id="f-litry" type="number" step="0.01" placeholder="np. 70,20" oninput="calcFromLitryCena()"></div>
@@ -278,6 +280,21 @@
       <button class="btn-cancel" onclick="closeCostSheet()">Anuluj</button>
       <button class="btn-save" style="background:var(--blue); color:#0c1720;" onclick="saveCost()">Zapisz koszt</button>
     </div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-top">
+    <div class="lightbox-status" id="lightboxStatus"></div>
+    <button class="lightbox-close" onclick="closeLightbox()">✕ Gotowe</button>
+  </div>
+  <div class="lightbox-stage" id="lightboxStage">
+    <img id="lightboxImg" src="" alt="Powiększony podgląd zdjęcia">
+  </div>
+  <div class="lightbox-zoom-ctrl">
+    <button type="button" onclick="zoomBy(-0.3)">−</button>
+    <button type="button" onclick="zoomBy(0.3)">+</button>
+    <button type="button" onclick="zoomReset()">⟲</button>
   </div>
 </div>
 
@@ -733,10 +750,15 @@ function resetFillupSheet(){
   editingFillupId = null;
   document.getElementById('sheet-title').textContent = 'Nowe tankowanie — ' + (vehicleById(activeTab)?.name||'');
   document.querySelector('#overlay .btn-save').textContent = 'Zapisz tankowanie';
+  closeLightbox();
   ['A','B'].forEach(t=>{
     document.getElementById('photoReview'+t).classList.remove('show');
     document.getElementById('photoImg'+t).src='';
+    document.getElementById('scanZone'+t).classList.remove('busy');
+    pz[t].scale=1; pz[t].x=0; pz[t].y=0;
   });
+  document.getElementById('scanIconA').textContent = '📷';
+  document.getElementById('scanIconB').textContent = '📏';
   document.getElementById('scanZoneLabelA').textContent = 'Zdjęcie dystrybutora (litry, cena, koszt)';
   document.getElementById('scanZoneLabelB').textContent = 'Zdjęcie licznika (przebieg)';
   ['fld-litry','fld-cena','fld-koszt','fld-przebieg'].forEach(id=>{
@@ -858,23 +880,43 @@ function deleteCost(id){
 
 /* ====================== SKANOWANIE ZDJĘCIA (Gemini przez Apps Script) ====================== */
 // target 'A' = zdjęcie dystrybutora (litry/cena/koszt), 'B' = zdjęcie licznika (przebieg)
+function setLightboxStatus(html){ document.getElementById('lightboxStatus').innerHTML = html; }
+
 function onPhotoPicked(evt, target){
   const file = evt.target.files[0];
   if(!file) return;
   const url = URL.createObjectURL(file);
   document.getElementById('photoImg'+target).src = url;
   document.getElementById('photoReview'+target).classList.add('show');
-  zoomReset(target);
+  pz[target].scale = 1; pz[target].x = 0; pz[target].y = 0;
+  openLightbox(target);
 
   const zoneLabel = document.getElementById('scanZoneLabel'+target);
+  const scanIcon = document.getElementById('scanIcon'+target);
   const defaultLabel = target==='B' ? 'Zdjęcie licznika (przebieg)' : 'Zdjęcie dystrybutora (litry, cena, koszt)';
+  const defaultIcon = target==='B' ? '📏' : '📷';
 
   if(!GAS_URL){
     showToast('Backend jeszcze niepodłączony (GAS_URL) — nie mogę odczytać zdjęcia. Uzupełnij pola ręcznie.', true);
     return;
   }
+
   document.getElementById('scanZone'+target).classList.add('busy');
-  zoneLabel.textContent = 'Odczytuję zdjęcie (Gemini)...';
+  scanIcon.innerHTML = '<span class="spinner"></span>';
+  let secs = 0;
+  const setBusyText = () => {
+    const t = 'Odczytuję zdjęcie... (' + secs + 's)';
+    zoneLabel.textContent = t;
+    setLightboxStatus('<span class="spinner"></span>' + t);
+  };
+  setBusyText();
+  const timer = setInterval(()=>{ secs++; setBusyText(); }, 1000);
+  const finishBusy = () => {
+    clearInterval(timer);
+    document.getElementById('scanZone'+target).classList.remove('busy');
+    scanIcon.textContent = defaultIcon;
+    setLightboxStatus('');
+  };
 
   const reader = new FileReader();
   reader.onload = async () => {
@@ -887,7 +929,7 @@ function onPhotoPicked(evt, target){
         body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType:file.type, dataBase64:base64 })
       });
       const json = await res.json();
-      document.getElementById('scanZone'+target).classList.remove('busy');
+      finishBusy();
       zoneLabel.textContent = 'Wybierz inne zdjęcie';
       if(json.ok && json.data){
         applyOcrData(json.data);
@@ -896,7 +938,7 @@ function onPhotoPicked(evt, target){
         showToast('Nie udało się odczytać zdjęcia: ' + (json.error||'nieznany błąd'), true);
       }
     }catch(e){
-      document.getElementById('scanZone'+target).classList.remove('busy');
+      finishBusy();
       zoneLabel.textContent = defaultLabel;
       showToast('Błąd połączenia z serwerem odczytu', true);
     }
@@ -917,54 +959,85 @@ function applyOcrData(data){
   });
 }
 
-/* pinch-zoom / pan / wheel-zoom do weryfikacji zdjęcia — osobny stan dla A i B */
-const pz = {
-  A: { scale:1, x:0, y:0, startDist:0, startScale:1, dragging:false, lastX:0, lastY:0 },
-  B: { scale:1, x:0, y:0, startDist:0, startScale:1, dragging:false, lastX:0, lastY:0 },
-};
-function pzClamp(t){
-  const s = pz[t];
-  const box = document.getElementById('photoReview'+t);
+/* ====================== PEŁNOEKRANOWY PODGLĄD (pinch-zoom / pan) ======================
+   Miniatura w formularzu jest statyczna -- całe przybliżanie/przesuwanie dzieje się
+   w osobnej, pełnoekranowej warstwie (#lightbox), więc nigdy nie wpływa na układ
+   formularza pod spodem. Stan przybliżenia trzymamy osobno dla A i B, więc wraca
+   się do tego samego kadru po ponownym otwarciu tego samego zdjęcia. */
+const pz = { A:{scale:1,x:0,y:0}, B:{scale:1,x:0,y:0} };
+let lightboxTarget = null;
+const pzDrag = { dragging:false, startDist:0, startScale:1, lastX:0, lastY:0 };
+
+function currentPz(){ return lightboxTarget ? pz[lightboxTarget] : null; }
+function pzClamp(){
+  const s = currentPz(); if(!s) return;
+  const box = document.getElementById('lightboxStage');
   const maxX = (box.clientWidth * (s.scale-1)) / 2;
   const maxY = (box.clientHeight * (s.scale-1)) / 2;
   s.x = Math.max(-maxX, Math.min(maxX, s.x));
   s.y = Math.max(-maxY, Math.min(maxY, s.y));
 }
-function pzApply(t){ pzClamp(t); const s=pz[t]; document.getElementById('photoImg'+t).style.transform = `translate(${s.x}px,${s.y}px) scale(${s.scale})`; }
-function zoomReset(t){ const s=pz[t]; s.scale=1; s.x=0; s.y=0; pzApply(t); }
-function zoomBy(t,d){ const s=pz[t]; s.scale = Math.min(4, Math.max(1, +(s.scale+d).toFixed(2))); if(s.scale===1){s.x=0;s.y=0;} pzApply(t); }
+function pzApply(){
+  const s = currentPz(); if(!s) return;
+  pzClamp();
+  document.getElementById('lightboxImg').style.transform = `translate(${s.x}px,${s.y}px) scale(${s.scale})`;
+}
+function zoomReset(){ const s=currentPz(); if(!s) return; s.scale=1; s.x=0; s.y=0; pzApply(); }
+function zoomBy(d){ const s=currentPz(); if(!s) return; s.scale=Math.min(4,Math.max(1,+(s.scale+d).toFixed(2))); if(s.scale===1){s.x=0;s.y=0;} pzApply(); }
+
+function openLightbox(target){
+  const srcImg = document.getElementById('photoImg'+target);
+  if(!srcImg.src) return;
+  lightboxTarget = target;
+  document.getElementById('lightboxImg').src = srcImg.src;
+  document.getElementById('lightbox').classList.add('open');
+  pzApply();
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  ['A','B'].forEach(t=>{
-    const pRev = document.getElementById('photoReview'+t);
-    const s = pz[t];
-    pRev.addEventListener('touchstart', e=>{
-      if(e.touches.length===2){
-        s.startDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-        s.startScale = s.scale;
-      } else if(e.touches.length===1){
-        s.dragging=true; s.lastX=e.touches[0].clientX; s.lastY=e.touches[0].clientY;
-      }
-    }, {passive:true});
-    pRev.addEventListener('touchmove', e=>{
-      e.preventDefault();
-      if(e.touches.length===2 && s.startDist){
-        const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-        s.scale = Math.min(4, Math.max(1, s.startScale * (dist/s.startDist)));
-        pzApply(t);
-      } else if(s.dragging && e.touches.length===1 && s.scale>1){
-        s.x += e.touches[0].clientX - s.lastX; s.y += e.touches[0].clientY - s.lastY;
-        s.lastX = e.touches[0].clientX; s.lastY = e.touches[0].clientY;
-        pzApply(t);
-      }
-    }, {passive:false});
-    pRev.addEventListener('touchend', ()=>{ s.dragging=false; s.startDist=0; if(s.scale===1){s.x=0;s.y=0;pzApply(t);} });
-    pRev.addEventListener('mousedown', e=>{ if(s.scale<=1) return; s.dragging=true; s.lastX=e.clientX; s.lastY=e.clientY; pRev.classList.add('dragging'); });
-    window.addEventListener('mousemove', e=>{ if(!s.dragging) return; s.x += e.clientX-s.lastX; s.y += e.clientY-s.lastY; s.lastX=e.clientX; s.lastY=e.clientY; pzApply(t); });
-    window.addEventListener('mouseup', ()=>{ s.dragging=false; pRev.classList.remove('dragging'); });
-    pRev.addEventListener('wheel', e=>{ e.preventDefault(); zoomBy(t, e.deltaY<0?0.25:-0.25); }, {passive:false});
-    pRev.addEventListener('dblclick', ()=> s.scale>1 ? zoomReset(t) : zoomBy(t,1.5));
+  const stage = document.getElementById('lightboxStage');
+  stage.addEventListener('touchstart', e=>{
+    if(!lightboxTarget) return;
+    if(e.touches.length===2){
+      pzDrag.startDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pzDrag.startScale = currentPz().scale;
+    } else if(e.touches.length===1){
+      pzDrag.dragging=true; pzDrag.lastX=e.touches[0].clientX; pzDrag.lastY=e.touches[0].clientY;
+    }
+  }, {passive:true});
+  stage.addEventListener('touchmove', e=>{
+    if(!lightboxTarget) return;
+    e.preventDefault();
+    const s = currentPz();
+    if(e.touches.length===2 && pzDrag.startDist){
+      const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      s.scale = Math.min(4, Math.max(1, pzDrag.startScale * (dist/pzDrag.startDist)));
+      pzApply();
+    } else if(pzDrag.dragging && e.touches.length===1 && s.scale>1){
+      s.x += e.touches[0].clientX - pzDrag.lastX; s.y += e.touches[0].clientY - pzDrag.lastY;
+      pzDrag.lastX = e.touches[0].clientX; pzDrag.lastY = e.touches[0].clientY;
+      pzApply();
+    }
+  }, {passive:false});
+  stage.addEventListener('touchend', ()=>{
+    pzDrag.dragging=false; pzDrag.startDist=0;
+    const s = currentPz();
+    if(s && s.scale===1){ s.x=0; s.y=0; pzApply(); }
   });
+  stage.addEventListener('mousedown', e=>{
+    const s = currentPz(); if(!s || s.scale<=1) return;
+    pzDrag.dragging=true; pzDrag.lastX=e.clientX; pzDrag.lastY=e.clientY; stage.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!pzDrag.dragging) return;
+    const s = currentPz(); if(!s) return;
+    s.x += e.clientX-pzDrag.lastX; s.y += e.clientY-pzDrag.lastY;
+    pzDrag.lastX=e.clientX; pzDrag.lastY=e.clientY; pzApply();
+  });
+  window.addEventListener('mouseup', ()=>{ pzDrag.dragging=false; stage.classList.remove('dragging'); });
+  stage.addEventListener('wheel', e=>{ if(!lightboxTarget) return; e.preventDefault(); zoomBy(e.deltaY<0?0.25:-0.25); }, {passive:false});
+  stage.addEventListener('dblclick', ()=>{ if(!lightboxTarget) return; currentPz().scale>1 ? zoomReset() : zoomBy(1.5); });
 
   document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
   document.getElementById('overlay-koszt').addEventListener('click', e=>{ if(e.target.id==='overlay-koszt') closeCostSheet(); });
