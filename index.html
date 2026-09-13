@@ -438,13 +438,21 @@ function intervalsFor(vehicleId){
 // tą samą logiką liczyć miesiąc, rok albo "od początku" (lifetime).
 function periodSummary(vehicleId, predicate){
   const ivs = intervalsFor(vehicleId).filter(iv=>predicate(iv.fillup.date));
-  const distance = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.distance,0);
-  const litersUsed = ivs.filter(iv=>!iv.isBaseline).reduce((s,iv)=>s+iv.fillup.liters,0);
+  const nonBaseline = ivs.filter(iv=>!iv.isBaseline);
+  const distance = nonBaseline.reduce((s,iv)=>s+iv.distance,0);
+  const litersUsed = nonBaseline.reduce((s,iv)=>s+iv.fillup.liters,0);
+  // "fuelCost" to realnie wydane pieniądze na paliwo w okresie (np. do kafelka
+  // "Koszt łączny") -- liczy się wszystkie tankowania, łącznie z bazowym.
+  // Do wskaźników na 100 km (costPer100/fuelCostPer100) liczy się TYLKO
+  // tankowania z policzalnym dystansem -- bazowe tankowanie nie ma
+  // przypisanego przejechanego dystansu, więc wliczanie jego kosztu do
+  // wskaźnika "na 100 km" sztucznie by go zawyżało.
   const fuelCost = state.fillups.filter(f=>f.vehicleId===vehicleId && predicate(f.date)).reduce((s,f)=>s+f.totalCost,0);
+  const fuelCostWithDistance = nonBaseline.reduce((s,iv)=>s+iv.fillup.totalCost,0);
   const otherCost = costsFor(vehicleId).filter(c=>predicate(c.date)).reduce((s,c)=>s+c.amount,0);
   const consumption = distance>0 ? litersUsed/distance*100 : null;
-  const costPer100 = distance>0 ? (fuelCost+otherCost)/distance*100 : null;
-  const fuelCostPer100 = distance>0 ? fuelCost/distance*100 : null;
+  const costPer100 = distance>0 ? (fuelCostWithDistance+otherCost)/distance*100 : null;
+  const fuelCostPer100 = distance>0 ? fuelCostWithDistance/distance*100 : null;
   return { distance, litersUsed, fuelCost, otherCost, total: fuelCost+otherCost, consumption, costPer100, fuelCostPer100 };
 }
 function monthSummary(vehicleId, mKey){ return periodSummary(vehicleId, d=>monthKey(d)===mKey); }
