@@ -455,16 +455,30 @@ function costsFor(vehicleId){
 function intervalsFor(vehicleId){
   const fs = fillupsFor(vehicleId);
   const costs = costsFor(vehicleId);
-  return fs.map((f,i)=>{
+  const claimed = new Set();
+  const result = fs.map((f,i)=>{
     if(i===0) return { fillup:f, distance:null, consumption:null, costPer100:null, totalCostPer100:null, isBaseline:true };
     const prev = fs[i-1];
     const distance = f.odo - prev.odo;
     const consumption = distance>0 ? (f.liters/distance*100) : null;
     const costPer100 = distance>0 ? (f.totalCost/distance*100) : null;
-    const otherInInterval = costs.filter(c=>c.date>prev.date && c.date<=f.date).reduce((s,c)=>s+c.amount,0);
+    const inInterval = costs.filter(c=>c.date>prev.date && c.date<=f.date);
+    inInterval.forEach(c=>claimed.add(c.id));
+    const otherInInterval = inInterval.reduce((s,c)=>s+c.amount,0);
     const totalCostPer100 = distance>0 ? (f.totalCost+otherInInterval)/distance*100 : null;
     return { fillup:f, distance, consumption, costPer100, totalCostPer100, isBaseline:false };
   });
+  // Koszty nowsze niż ostatnie tankowanie (np. naprawa zapisana dziś, gdy
+  // ostatnie tankowanie było kilka dni temu) nie mieszczą się jeszcze w
+  // żadnym "zamkniętym" odcinku -- doliczamy je do ostatniego znanego
+  // odcinka, żeby nie znikały z wykresu/wskaźników do czasu kolejnego
+  // tankowania (tak samo jak są już liczone w podsumowaniach okresowych).
+  const unclaimed = costs.filter(c=>!claimed.has(c.id)).reduce((s,c)=>s+c.amount,0);
+  if(unclaimed>0){
+    const last = [...result].reverse().find(iv=>!iv.isBaseline && iv.distance>0);
+    if(last) last.totalCostPer100 += unclaimed/last.distance*100;
+  }
+  return result;
 }
 
 // predicate(dateISO) decyduje które wpisy wchodzą do podsumowania -- pozwala
