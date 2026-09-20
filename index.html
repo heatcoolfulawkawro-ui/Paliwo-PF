@@ -77,7 +77,13 @@ function paliwoPfShowVersion(v){
   .sync.err .dot{background:var(--red);}
   .page-version{font-size:.65rem; color:var(--ink-dim); opacity:.7; margin:-6px 0 10px; cursor:pointer;}
 
-  .tabs{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
+  .tabs-row{display:flex; align-items:center; gap:4px;}
+  .tabs-nav{
+    flex:0 0 auto; width:26px; height:26px; border-radius:50%; padding:0;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink-dim);
+    font-size:1rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .tabs{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; flex:1; min-width:0;}
   .tabs::-webkit-scrollbar{display:none;}
   .tab{
     flex:0 0 auto; display:flex; align-items:center; gap:6px;
@@ -87,8 +93,7 @@ function paliwoPfShowVersion(v){
   }
   .tab.active{background:var(--amber); border-color:var(--amber); color:#1b1204;}
   .tab.ghost{background:transparent; border-style:dashed; color:var(--ink-dim);}
-  .tab[data-vid]{touch-action:pan-y; user-select:none;}
-  .tab.dragging{opacity:.6; box-shadow:0 4px 14px rgba(0,0,0,.5); transform:scale(1.06); z-index:5;}
+  .tab.dragging{opacity:.6; box-shadow:0 4px 14px rgba(0,0,0,.5); transform:scale(1.06); z-index:5; touch-action:none;}
 
   .section{margin-top:20px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:10px;}
@@ -253,7 +258,11 @@ function paliwoPfShowVersion(v){
     <span class="sync local" id="syncIndicator"><span class="dot"></span><span id="syncText">lokalnie</span></span>
   </div>
   <div class="page-version" id="pageVersion" onclick="location.replace(location.pathname + '?v=' + Date.now())" title="Stuknij, żeby wymusić pobranie najnowszej wersji">wersja strony: —</div>
-  <div class="tabs" id="tabs"></div>
+  <div class="tabs-row">
+    <button class="tabs-nav" onclick="scrollTabs(-1)" aria-label="Przewiń zakładki w lewo">‹</button>
+    <div class="tabs" id="tabs"></div>
+    <button class="tabs-nav" onclick="scrollTabs(1)" aria-label="Przewiń zakładki w prawo">›</button>
+  </div>
 </div>
 
 <div id="content"></div>
@@ -584,6 +593,10 @@ function renderContent(){
 }
 
 /* ---- przesuwanie zakładek: przytrzymaj i przeciągnij lewo/prawo ---- */
+function scrollTabs(dir){
+  document.getElementById('tabs').scrollBy({ left: dir*160, behavior:'smooth' });
+}
+
 function initTabDrag(){
   const tabs = document.getElementById('tabs');
   if(tabs.dataset.dragBound) return;
