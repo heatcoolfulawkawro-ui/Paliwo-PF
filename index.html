@@ -93,7 +93,15 @@ function paliwoPfShowVersion(v){
   }
   .tab.active{background:var(--amber); border-color:var(--amber); color:#1b1204;}
   .tab.ghost{background:transparent; border-style:dashed; color:var(--ink-dim);}
-  .tab.dragging{opacity:.6; box-shadow:0 4px 14px rgba(0,0,0,.5); transform:scale(1.06); z-index:5; touch-action:none;}
+  .tabs-nav.active{background:var(--amber); border-color:var(--amber); color:#1b1204;}
+  .tab.reorder{padding:6px 8px 6px 6px; gap:4px; cursor:default;}
+  .tab-label{padding:0 2px;}
+  .tab-move{
+    flex:0 0 auto; width:24px; height:24px; border-radius:50%; padding:0;
+    border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    font-size:.75rem; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .tab-move:disabled{opacity:.3; cursor:default;}
 
   .section{margin-top:20px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:10px;}
@@ -174,8 +182,12 @@ function paliwoPfShowVersion(v){
   .btn-add-cost{background:var(--blue); color:#0c1720; border:none; font-weight:700; font-size:.76rem; padding:6px 12px; border-radius:999px; cursor:pointer;}
 
   .fleet-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:13px; margin-bottom:8px;}
-  .fleet-card .fc-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;}
+  .fleet-card .fc-top{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;}
   .fleet-card .fc-name{font-weight:700; font-size:.92rem; display:flex; align-items:center; gap:7px; min-width:0;}
+  .fc-move{
+    flex:0 0 auto; background:var(--panel2); border:1px solid var(--line); color:var(--blue);
+    font-size:.68rem; font-weight:600; padding:4px 8px; border-radius:999px; cursor:pointer;
+  }
   .fc-metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
   .fc-metrics .fm-label{font-size:.65rem; color:var(--ink-dim);}
   .fc-metrics .fm-value{font-family:var(--font-mono); font-size:.86rem; font-weight:600; margin-top:1px;}
@@ -262,6 +274,7 @@ function paliwoPfShowVersion(v){
     <button class="tabs-nav" onclick="scrollTabs(-1)" aria-label="Przewiń zakładki w lewo">‹</button>
     <div class="tabs" id="tabs"></div>
     <button class="tabs-nav" onclick="scrollTabs(1)" aria-label="Przewiń zakładki w prawo">›</button>
+    <button class="tabs-nav" id="reorderBtn" onclick="toggleReorderMode()" title="Zmień kolejność zakładek" aria-label="Zmień kolejność zakładek">🔀</button>
   </div>
 </div>
 
@@ -563,24 +576,45 @@ function trendSeries(vehicleId, period){
 /* ====================== RENDEROWANIE ====================== */
 function render(){ renderTabs(); renderContent(); document.getElementById('fab').hidden = !vehicleById(activeTab); }
 
+let reorderMode = false;
 function renderTabs(){
   const tabs = document.getElementById('tabs');
   let html = '';
-  state.vehicles.forEach(v=>{
-    html += `<div class="tab ${activeTab===v.id?'active':''}" data-vid="${v.id}" onclick="switchTab('${v.id}')">${esc(v.name)}</div>`;
+  state.vehicles.forEach((v,i)=>{
+    if(reorderMode){
+      html += `
+        <div class="tab reorder" data-vid="${v.id}">
+          <button class="tab-move" onclick="moveVehicle('${v.id}',-1)" ${i===0?'disabled':''}>◀</button>
+          <span class="tab-label">${esc(v.name)}</span>
+          <button class="tab-move" onclick="moveVehicle('${v.id}',1)" ${i===state.vehicles.length-1?'disabled':''}>▶</button>
+        </div>`;
+    } else {
+      html += `<div class="tab ${activeTab===v.id?'active':''}" data-vid="${v.id}" onclick="switchTab('${v.id}')">${esc(v.name)}</div>`;
+    }
   });
-  html += `<div class="tab ${activeTab==='flota-firma'?'active':''}" onclick="switchTab('flota-firma')">🏢 Flota firmowa</div>`;
-  html += `<div class="tab ${activeTab==='flota-prywatna'?'active':''}" onclick="switchTab('flota-prywatna')">🏠 Flota prywatna</div>`;
-  html += `<div class="tab ghost ${activeTab==='dodaj'?'active':''}" onclick="switchTab('dodaj')">+ Dodaj auto</div>`;
+  if(!reorderMode){
+    html += `<div class="tab ${activeTab==='flota-firma'?'active':''}" onclick="switchTab('flota-firma')">🏢 Flota firmowa</div>`;
+    html += `<div class="tab ${activeTab==='flota-prywatna'?'active':''}" onclick="switchTab('flota-prywatna')">🏠 Flota prywatna</div>`;
+    html += `<div class="tab ghost ${activeTab==='dodaj'?'active':''}" onclick="switchTab('dodaj')">+ Dodaj auto</div>`;
+  }
   tabs.innerHTML = html;
-  initTabDrag();
 }
 
-let suppressNextTabClick = false;
-function switchTab(id){
-  if(suppressNextTabClick){ suppressNextTabClick = false; return; }
-  activeTab = id; render();
+function toggleReorderMode(){
+  reorderMode = !reorderMode;
+  document.getElementById('reorderBtn').classList.toggle('active', reorderMode);
+  renderTabs();
 }
+function moveVehicle(vehicleId, dir){
+  const i = state.vehicles.findIndex(v=>v.id===vehicleId);
+  const j = i+dir;
+  if(i<0 || j<0 || j>=state.vehicles.length) return;
+  [state.vehicles[i], state.vehicles[j]] = [state.vehicles[j], state.vehicles[i]];
+  saveState();
+  renderTabs();
+}
+
+function switchTab(id){ activeTab = id; render(); }
 
 const FLEET_TABS = ['flota-firma','flota-prywatna'];
 function renderContent(){
@@ -592,59 +626,8 @@ function renderContent(){
   else { activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma'; el.innerHTML = FLEET_TABS.includes(activeTab) ? renderFleet('firmowe') : renderVehicle(activeTab); }
 }
 
-/* ---- przesuwanie zakładek: przytrzymaj i przeciągnij lewo/prawo ---- */
 function scrollTabs(dir){
   document.getElementById('tabs').scrollBy({ left: dir*160, behavior:'smooth' });
-}
-
-function initTabDrag(){
-  const tabs = document.getElementById('tabs');
-  if(tabs.dataset.dragBound) return;
-  tabs.dataset.dragBound = '1';
-  let pressTimer = null, dragEl = null, moved = false;
-
-  function endPress(){ clearTimeout(pressTimer); }
-  function startTracking(el, pointerId){
-    pressTimer = setTimeout(()=>{
-      dragEl = el; moved = false;
-      dragEl.classList.add('dragging');
-      try{ dragEl.setPointerCapture(pointerId); }catch(e){}
-    }, 420);
-  }
-
-  tabs.addEventListener('pointerdown', e=>{
-    const el = e.target.closest('.tab[data-vid]');
-    if(!el) return;
-    startTracking(el, e.pointerId);
-  });
-  tabs.addEventListener('pointermove', e=>{
-    if(!dragEl) return;
-    e.preventDefault();
-    const others = [...tabs.querySelectorAll('.tab[data-vid]')].filter(el=>el!==dragEl);
-    for(const el of others){
-      const r = el.getBoundingClientRect();
-      const mid = r.left + r.width/2;
-      if(e.clientX < mid && dragEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING){
-        tabs.insertBefore(dragEl, el); moved = true; break;
-      } else if(e.clientX > mid && dragEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING){
-        tabs.insertBefore(dragEl, el.nextSibling); moved = true; break;
-      }
-    }
-  });
-  tabs.addEventListener('pointerup', ()=>{
-    endPress();
-    if(!dragEl) return;
-    dragEl.classList.remove('dragging');
-    if(moved){
-      const order = [...tabs.querySelectorAll('.tab[data-vid]')].map(el=>el.dataset.vid);
-      state.vehicles.sort((a,b)=> order.indexOf(a.id) - order.indexOf(b.id));
-      saveState();
-      suppressNextTabClick = true;
-    }
-    dragEl = null; moved = false;
-  });
-  tabs.addEventListener('pointercancel', ()=>{ endPress(); if(dragEl) dragEl.classList.remove('dragging'); dragEl=null; moved=false; });
-  tabs.addEventListener('pointerleave', e=>{ if(!dragEl) endPress(); });
 }
 
 function renderVehicle(vehicleId){
@@ -777,6 +760,7 @@ function renderFleetPeriodBlock(title, vehicles, summaryFn, extraHeadHtml){
       <div class="fleet-card">
         <div class="fc-top">
           <div class="fc-name">🚐 ${esc(v.name)}</div>
+          <button class="fc-move" onclick="toggleVehicleType('${v.id}')">${(v.type||'firmowe')==='firmowe' ? '→ 🏠 Prywatne' : '→ 🏢 Firmowe'}</button>
           <span class="cat-pill">${s.consumption===null?'—':n(s.consumption,2)+' l/100'}</span>
         </div>
         <div class="fc-metrics">
