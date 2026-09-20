@@ -87,6 +87,8 @@ function paliwoPfShowVersion(v){
   }
   .tab.active{background:var(--amber); border-color:var(--amber); color:#1b1204;}
   .tab.ghost{background:transparent; border-style:dashed; color:var(--ink-dim);}
+  .tab[data-vid]{touch-action:pan-y; user-select:none;}
+  .tab.dragging{opacity:.6; box-shadow:0 4px 14px rgba(0,0,0,.5); transform:scale(1.06); z-index:5;}
 
   .section{margin-top:20px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; gap:10px;}
@@ -361,7 +363,7 @@ function seedState(){
 }
 
 let state = loadState();
-let activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+let activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
 let editingFillupId = null;
 let editingCostId = null;
 const uiState = {}; // per-vehicle ephemeral UI: { month:'YYYY-MM', period:'dzien' }
@@ -410,7 +412,7 @@ async function loadRemoteOnStart(){
       const remote = JSON.parse(text);
       if(remote && remote.vehicles) {
         state = remote;
-        if(!state.vehicles.find(v=>v.id===activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+        if(!state.vehicles.find(v=>v.id===activeTab) && !FLEET_TABS.includes(activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
         setSyncStatus('ok');
         render();
       }
@@ -556,21 +558,80 @@ function renderTabs(){
   const tabs = document.getElementById('tabs');
   let html = '';
   state.vehicles.forEach(v=>{
-    html += `<div class="tab ${activeTab===v.id?'active':''}" onclick="switchTab('${v.id}')">${esc(v.name)}</div>`;
+    html += `<div class="tab ${activeTab===v.id?'active':''}" data-vid="${v.id}" onclick="switchTab('${v.id}')">${esc(v.name)}</div>`;
   });
-  html += `<div class="tab ${activeTab==='flota'?'active':''}" onclick="switchTab('flota')">📊 Flota</div>`;
+  html += `<div class="tab ${activeTab==='flota-firma'?'active':''}" onclick="switchTab('flota-firma')">🏢 Flota firmowa</div>`;
+  html += `<div class="tab ${activeTab==='flota-prywatna'?'active':''}" onclick="switchTab('flota-prywatna')">🏠 Flota prywatna</div>`;
   html += `<div class="tab ghost ${activeTab==='dodaj'?'active':''}" onclick="switchTab('dodaj')">+ Dodaj auto</div>`;
   tabs.innerHTML = html;
+  initTabDrag();
 }
 
-function switchTab(id){ activeTab = id; render(); }
+let suppressNextTabClick = false;
+function switchTab(id){
+  if(suppressNextTabClick){ suppressNextTabClick = false; return; }
+  activeTab = id; render();
+}
 
+const FLEET_TABS = ['flota-firma','flota-prywatna'];
 function renderContent(){
   const el = document.getElementById('content');
-  if(activeTab==='flota') el.innerHTML = renderFleet();
+  if(activeTab==='flota-firma') el.innerHTML = renderFleet('firmowe');
+  else if(activeTab==='flota-prywatna') el.innerHTML = renderFleet('prywatne');
   else if(activeTab==='dodaj') el.innerHTML = renderAddVehicle();
   else if(vehicleById(activeTab)) el.innerHTML = renderVehicle(activeTab);
-  else { activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota'; el.innerHTML = activeTab==='flota' ? renderFleet() : renderVehicle(activeTab); }
+  else { activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma'; el.innerHTML = FLEET_TABS.includes(activeTab) ? renderFleet('firmowe') : renderVehicle(activeTab); }
+}
+
+/* ---- przesuwanie zakładek: przytrzymaj i przeciągnij lewo/prawo ---- */
+function initTabDrag(){
+  const tabs = document.getElementById('tabs');
+  if(tabs.dataset.dragBound) return;
+  tabs.dataset.dragBound = '1';
+  let pressTimer = null, dragEl = null, moved = false;
+
+  function endPress(){ clearTimeout(pressTimer); }
+  function startTracking(el, pointerId){
+    pressTimer = setTimeout(()=>{
+      dragEl = el; moved = false;
+      dragEl.classList.add('dragging');
+      try{ dragEl.setPointerCapture(pointerId); }catch(e){}
+    }, 420);
+  }
+
+  tabs.addEventListener('pointerdown', e=>{
+    const el = e.target.closest('.tab[data-vid]');
+    if(!el) return;
+    startTracking(el, e.pointerId);
+  });
+  tabs.addEventListener('pointermove', e=>{
+    if(!dragEl) return;
+    e.preventDefault();
+    const others = [...tabs.querySelectorAll('.tab[data-vid]')].filter(el=>el!==dragEl);
+    for(const el of others){
+      const r = el.getBoundingClientRect();
+      const mid = r.left + r.width/2;
+      if(e.clientX < mid && dragEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING){
+        tabs.insertBefore(dragEl, el); moved = true; break;
+      } else if(e.clientX > mid && dragEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING){
+        tabs.insertBefore(dragEl, el.nextSibling); moved = true; break;
+      }
+    }
+  });
+  tabs.addEventListener('pointerup', ()=>{
+    endPress();
+    if(!dragEl) return;
+    dragEl.classList.remove('dragging');
+    if(moved){
+      const order = [...tabs.querySelectorAll('.tab[data-vid]')].map(el=>el.dataset.vid);
+      state.vehicles.sort((a,b)=> order.indexOf(a.id) - order.indexOf(b.id));
+      saveState();
+      suppressNextTabClick = true;
+    }
+    dragEl = null; moved = false;
+  });
+  tabs.addEventListener('pointercancel', ()=>{ endPress(); if(dragEl) dragEl.classList.remove('dragging'); dragEl=null; moved=false; });
+  tabs.addEventListener('pointerleave', e=>{ if(!dragEl) endPress(); });
 }
 
 function renderVehicle(vehicleId){
@@ -593,6 +654,7 @@ function renderVehicle(vehicleId){
     <div class="vehicle-head">
       <h1>${esc(v.name)}</h1>
       <div class="vehicle-actions">
+        <button onclick="toggleVehicleType('${vehicleId}')">${(v.type||'firmowe')==='prywatne' ? '🏠 Prywatne' : '🏢 Firmowe'}</button>
         <button onclick="renameVehicle('${vehicleId}')">✏️ Nazwa</button>
         <button class="danger" onclick="deleteVehicle('${vehicleId}')">🗑️ Usuń auto</button>
       </div>
@@ -692,10 +754,10 @@ function renderCostEntry(c){
     </div>`;
 }
 
-function renderFleetPeriodBlock(title, summaryFn, extraHeadHtml){
+function renderFleetPeriodBlock(title, vehicles, summaryFn, extraHeadHtml){
   let sumDist=0, sumLiters=0, sumFuel=0, sumOther=0;
   let cards = '';
-  state.vehicles.forEach(v=>{
+  vehicles.forEach(v=>{
     const s = summaryFn(v);
     sumDist+=s.distance; sumLiters+=s.litersUsed; sumFuel+=s.fuelCost; sumOther+=s.otherCost;
     cards += `
@@ -717,9 +779,9 @@ function renderFleetPeriodBlock(title, summaryFn, extraHeadHtml){
   return `
     <div class="section">
       <div class="section-head"><h2>${title}</h2>${extraHeadHtml||''}</div>
-      ${state.vehicles.length===0 ? '<div class="empty-state">Brak pojazdów</div>' : cards}
+      ${vehicles.length===0 ? '<div class="empty-state">Brak pojazdów w tej kategorii</div>' : cards}
       <div class="fleet-total">
-        <h3>Cała flota</h3>
+        <h3>Razem</h3>
         <div class="grid-summary">
           <div class="tile"><div class="t-label">Suma km</div><div class="t-value">${n(sumDist,0)}</div></div>
           <div class="tile"><div class="t-label">Suma paliwa</div><div class="t-value">${n(sumLiters,1)} l</div></div>
@@ -731,18 +793,22 @@ function renderFleetPeriodBlock(title, summaryFn, extraHeadHtml){
     </div>`;
 }
 
-function renderFleet(){
-  if(!uiState.__fleet) uiState.__fleet = { month: monthKey(todayISO()) };
-  const fUi = uiState.__fleet;
+// scope: 'firmowe' albo 'prywatne' -- każdy pojazd bez ustawionego typu
+// liczy się jako firmowy (domyślne dla starych/importowanych aut).
+function renderFleet(scope){
+  const vehicles = state.vehicles.filter(v => (v.type||'firmowe')===scope);
+  const key = '__fleet_' + scope;
+  if(!uiState[key]) uiState[key] = { month: monthKey(todayISO()) };
+  const fUi = uiState[key];
   const year = fUi.month.slice(0,4);
-  const monthNav = `<div class="month-switch"><button onclick="shiftFleetMonth(-1)">‹</button><button onclick="shiftFleetMonth(1)">›</button></div>`;
+  const monthNav = `<div class="month-switch"><button onclick="shiftFleetMonth('${scope}',-1)">‹</button><button onclick="shiftFleetMonth('${scope}',1)">›</button></div>`;
   let html = '<div style="margin-top:14px;"></div>';
-  html += renderFleetPeriodBlock('Miesiąc — ' + fmtMonth(fUi.month), v=>monthSummary(v.id, fUi.month), monthNav);
-  html += renderFleetPeriodBlock('Rok ' + year + ' — narastająco', v=>yearSummary(v.id, year));
+  html += renderFleetPeriodBlock('Miesiąc — ' + fmtMonth(fUi.month), vehicles, v=>monthSummary(v.id, fUi.month), monthNav);
+  html += renderFleetPeriodBlock('Rok ' + year + ' — narastająco', vehicles, v=>yearSummary(v.id, year));
   return html;
 }
-function shiftFleetMonth(dir){
-  const ui = uiState.__fleet;
+function shiftFleetMonth(scope, dir){
+  const ui = uiState['__fleet_' + scope];
   let [y,m] = ui.month.split('-').map(Number);
   m += dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
   ui.month = `${y}-${pad(m)}`;
@@ -879,6 +945,11 @@ function addVehicle(){
   render();
   showToast('Dodano pojazd: ' + name);
 }
+function toggleVehicleType(vehicleId){
+  const v = vehicleById(vehicleId);
+  v.type = (v.type||'firmowe')==='prywatne' ? 'firmowe' : 'prywatne';
+  saveState(); renderContent();
+}
 function renameVehicle(vehicleId){
   const v = vehicleById(vehicleId);
   const name = prompt('Nowa nazwa pojazdu:', v.name);
@@ -914,7 +985,7 @@ function deleteVehicle(vehicleId){
   state.fillups = state.fillups.filter(f=>f.vehicleId!==vehicleId);
   state.costs = state.costs.filter(c=>c.vehicleId!==vehicleId);
   delete uiState[vehicleId];
-  activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota';
+  activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
   saveState(); render();
   showToast('Usunięto pojazd (kopia zapasowa zapisana na telefonie)');
 }
