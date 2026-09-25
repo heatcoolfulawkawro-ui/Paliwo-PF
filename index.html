@@ -372,6 +372,9 @@ function paliwoPfShowVersion(v){
     <div class="sheet-actions">
       <button class="btn-save" style="flex:1" onclick="submitPinGate()">Odblokuj</button>
     </div>
+    <div style="text-align:center; margin-top:12px;">
+      <a href="#" onclick="openPinChangeFromGate(); return false;" style="color:var(--ink-dim); font-size:.78rem;">Zapomniałeś PIN-u? Zresetuj przez e-mail</a>
+    </div>
   </div>
 </div>
 
@@ -382,7 +385,7 @@ function paliwoPfShowVersion(v){
     <div id="pinChangeStep1">
       <p style="font-size:.82rem; color:var(--ink-dim); margin:0 0 14px;">Wyślemy jednorazowy kod na Twój e-mail.</p>
       <div class="sheet-actions">
-        <button class="btn-cancel" onclick="closePinChangeSheet()">Anuluj</button>
+        <button class="btn-cancel" onclick="cancelPinChangeSheet()">Anuluj</button>
         <button class="btn-save" onclick="requestPinResetCode()">Wyślij kod</button>
       </div>
     </div>
@@ -391,7 +394,7 @@ function paliwoPfShowVersion(v){
       <div class="field"><label>Nowy PIN</label><input id="pinResetNew" type="password" inputmode="numeric" placeholder="np. 10 cyfr"></div>
       <div class="field-error" id="pinChangeError"></div>
       <div class="sheet-actions">
-        <button class="btn-cancel" onclick="closePinChangeSheet()">Anuluj</button>
+        <button class="btn-cancel" onclick="cancelPinChangeSheet()">Anuluj</button>
         <button class="btn-save" onclick="confirmPinResetCode()">Zmień</button>
       </div>
     </div>
@@ -451,7 +454,9 @@ function applyRemoteState(text){
   }catch(e){ /* nieprawidłowa odpowiedź — zostajemy przy danych lokalnych */ }
 }
 
+let pinChangeFromGate = false;
 function openPinChangeSheet(){
+  pinChangeFromGate = false;
   document.getElementById('pinChangeStep1').style.display='';
   document.getElementById('pinChangeStep2').style.display='none';
   document.getElementById('pinChangeError').classList.remove('show');
@@ -459,7 +464,16 @@ function openPinChangeSheet(){
   document.getElementById('pinResetNew').value='';
   document.getElementById('pinChangeOverlay').classList.add('open');
 }
+function openPinChangeFromGate(){
+  hidePinGate();
+  openPinChangeSheet();
+  pinChangeFromGate = true;
+}
 function closePinChangeSheet(){ document.getElementById('pinChangeOverlay').classList.remove('open'); }
+function cancelPinChangeSheet(){
+  closePinChangeSheet();
+  if(pinChangeFromGate){ pinChangeFromGate = false; showPinGate(); }
+}
 
 async function requestPinResetCode(){
   if(!GAS_URL){ showToast('Brak konfiguracji serwera', true); return; }
@@ -490,8 +504,15 @@ async function confirmPinResetCode(){
     const data = await res.json();
     if(!data.ok){ errEl.textContent = data.error || 'Błąd'; errEl.classList.add('show'); return; }
     setPin(newPin);
+    pinChangeFromGate = false;
     closePinChangeSheet();
+    hidePinGate();
     showToast('PIN zmieniony');
+    try{
+      const r2 = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY) + '&pin=' + encodeURIComponent(newPin));
+      const t2 = await r2.text();
+      if(t2 !== AUTH_FAIL_TEXT) applyRemoteState(t2);
+    }catch(e2){ /* offline — dane lokalne zostają, dociągnie się później */ }
   }catch(e){ errEl.textContent='Brak połączenia'; errEl.classList.add('show'); }
 }
 
