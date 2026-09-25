@@ -76,6 +76,10 @@ function paliwoPfShowVersion(v){
   .sync.local .dot{background:var(--amber);}
   .sync.err .dot{background:var(--red);}
   .page-version{font-size:.65rem; color:var(--ink-dim); opacity:.7; margin:-6px 0 10px; cursor:pointer;}
+  .pin-btn{
+    margin-left:8px; flex:0 0 auto; background:var(--panel2); border:1px solid var(--line);
+    color:var(--ink-dim); border-radius:20px; padding:3px 9px; font-size:.68rem; cursor:pointer;
+  }
 
   .tabs-row{display:flex; align-items:center; gap:4px;}
   .tabs-nav{
@@ -268,6 +272,7 @@ function paliwoPfShowVersion(v){
     <span class="name">⛽ Paliwo PF</span>
     <span class="sub">RA-STER · dziennik tankowań</span>
     <span class="sync local" id="syncIndicator"><span class="dot"></span><span id="syncText">lokalnie</span></span>
+    <button class="pin-btn" onclick="openPinChangeSheet()" title="Zmień PIN">🔒 PIN</button>
   </div>
   <div class="page-version" id="pageVersion" onclick="location.replace(location.pathname + '?v=' + Date.now())" title="Stuknij, żeby wymusić pobranie najnowszej wersji">wersja strony: —</div>
   <div class="tabs-row">
@@ -370,7 +375,6 @@ function paliwoPfShowVersion(v){
   </div>
 </div>
 
-<button id="pinLockBtn" onclick="openPinChangeSheet()" title="Zmień PIN" style="position:fixed; left:10px; bottom:10px; z-index:15; background:var(--panel2); border:1px solid var(--line); color:var(--ink-dim); border-radius:50%; width:34px; height:34px; font-size:14px; cursor:pointer;">🔒</button>
 
 <div class="overlay" id="pinChangeOverlay">
   <div class="sheet">
