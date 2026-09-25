@@ -1,4 +1,23 @@
+// Musi być identyczna wartość początkowa jak w index.html (PIN_INITIAL) —
+// jeśli PIN nigdy nie był zmieniony przez "Zmień PIN", to jest ta,
+// którą trzeba wpisać. Po pierwszej zmianie prawdziwy PIN żyje tylko
+// w PropertiesService, ta stała już nie ma znaczenia.
+const PIN_INITIAL = '1000499156';
+const PIN_RESET_EMAIL = 'heatcoolfulawkawro@gmail.com';
+// Zwracany zamiast danych z fetch(GET), gdy PIN się nie zgadza — pusty
+// string ('') już oznacza "brak takiego klucza", więc potrzebny jest
+// osobny, jednoznaczny sygnał, którego żadna prawdziwa wartość nigdy
+// nie przyjmie.
+const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
+
+function currentPin() {
+  return PropertiesService.getScriptProperties().getProperty('APP_PIN') || PIN_INITIAL;
+}
+
 function doGet(e) {
+  if (String(e.parameter.pin) !== currentPin()) {
+    return ContentService.createTextOutput(AUTH_FAIL_TEXT).setMimeType(ContentService.MimeType.JSON);
+  }
   const key = e.parameter.key;
   const sheet = getDataSheet();
   const rows = sheet.getDataRange().getValues();
@@ -13,6 +32,13 @@ function doGet(e) {
 
 function doPost(e) {
   const body = JSON.parse(e.postData.contents);
+
+  if (body.action === 'request_pin_reset') return requestPinReset();
+  if (body.action === 'confirm_pin_reset') return confirmPinReset(body.code, body.newPin);
+
+  if (String(body.pin) !== currentPin()) {
+    return jsonOut({ ok: false, error: 'Brak autoryzacji' });
+  }
 
   if (body.action === 'ocr') {
     return handleOcr(body);
@@ -116,4 +142,35 @@ function handleOcr(body) {
 
 function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---------- PIN: zmiana / przypomnienie przez kod z maila ----------
+// Bez tokenu — to jedyna para akcji dostępna komuś, kto NIE zna aktualnego
+// PIN-u (inaczej "zapomniałem PIN-u" nie dałoby się obsłużyć). Limit czasowy
+// między żądaniami to jedyna ochrona przed zasypaniem skrzynki e-mail.
+function requestPinReset() {
+  const props = PropertiesService.getScriptProperties();
+  const lastReq = Number(props.getProperty('PIN_RESET_LAST_REQ') || 0);
+  if (Date.now() - lastReq < 2 * 60 * 1000) {
+    return jsonOut({ ok: false, error: 'Poczekaj chwilę i spróbuj ponownie.' });
+  }
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  props.setProperty('PIN_RESET_CODE', code);
+  props.setProperty('PIN_RESET_EXPIRES', String(Date.now() + 10 * 60 * 1000));
+  props.setProperty('PIN_RESET_LAST_REQ', String(Date.now()));
+  MailApp.sendEmail(PIN_RESET_EMAIL, 'Kod do zmiany PIN — Paliwo PF', 'Twój kod do zmiany PIN: ' + code + '\n\nWażny 10 minut. Jeśli to nie Ty, zignoruj tę wiadomość.');
+  return jsonOut({ ok: true });
+}
+
+function confirmPinReset(code, newPin) {
+  const props = PropertiesService.getScriptProperties();
+  const storedCode = props.getProperty('PIN_RESET_CODE');
+  const expires = Number(props.getProperty('PIN_RESET_EXPIRES') || 0);
+  if (!storedCode || String(code) !== storedCode) return jsonOut({ ok: false, error: 'Nieprawidłowy kod' });
+  if (Date.now() > expires) return jsonOut({ ok: false, error: 'Kod wygasł — poproś o nowy' });
+  if (!/^\d{4,12}$/.test(String(newPin))) return jsonOut({ ok: false, error: 'PIN musi mieć od 4 do 12 cyfr' });
+  props.setProperty('APP_PIN', String(newPin));
+  props.deleteProperty('PIN_RESET_CODE');
+  props.deleteProperty('PIN_RESET_EXPIRES');
+  return jsonOut({ ok: true });
 }

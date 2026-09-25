@@ -359,12 +359,137 @@ function paliwoPfShowVersion(v){
 
 <div class="toast" id="toast"><span class="tdot"></span><span id="toast-text"></span></div>
 
+<div class="overlay" id="pinGateOverlay" style="align-items:center;">
+  <div class="sheet" style="border-radius:16px; max-width:320px;">
+    <h3>🔒 Wpisz PIN</h3>
+    <div class="field"><input id="pinGateInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN"></div>
+    <div class="field-error" id="pinGateError">Błędny PIN — spróbuj ponownie.</div>
+    <div class="sheet-actions">
+      <button class="btn-save" style="flex:1" onclick="submitPinGate()">Odblokuj</button>
+    </div>
+  </div>
+</div>
+
+<button id="pinLockBtn" onclick="openPinChangeSheet()" title="Zmień PIN" style="position:fixed; left:10px; bottom:10px; z-index:15; background:var(--panel2); border:1px solid var(--line); color:var(--ink-dim); border-radius:50%; width:34px; height:34px; font-size:14px; cursor:pointer;">🔒</button>
+
+<div class="overlay" id="pinChangeOverlay">
+  <div class="sheet">
+    <h3>Zmień PIN</h3>
+    <div id="pinChangeStep1">
+      <p style="font-size:.82rem; color:var(--ink-dim); margin:0 0 14px;">Wyślemy jednorazowy kod na Twój e-mail.</p>
+      <div class="sheet-actions">
+        <button class="btn-cancel" onclick="closePinChangeSheet()">Anuluj</button>
+        <button class="btn-save" onclick="requestPinResetCode()">Wyślij kod</button>
+      </div>
+    </div>
+    <div id="pinChangeStep2" style="display:none;">
+      <div class="field"><label>Kod z e-maila</label><input id="pinResetCode" type="text" inputmode="numeric" placeholder="6 cyfr"></div>
+      <div class="field"><label>Nowy PIN</label><input id="pinResetNew" type="password" inputmode="numeric" placeholder="np. 10 cyfr"></div>
+      <div class="field-error" id="pinChangeError"></div>
+      <div class="sheet-actions">
+        <button class="btn-cancel" onclick="closePinChangeSheet()">Anuluj</button>
+        <button class="btn-save" onclick="confirmPinResetCode()">Zmień</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ====================== KONFIGURACJA ====================== */
 // Wklej tu URL wdrożonego Google Apps Script (kończy się na /exec).
 // Dopóki puste, appka działa wyłącznie lokalnie (localStorage) bez synchronizacji do Arkusza.
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwp2qGgpobvHRCOurqA614AxnIA5ozdLlv_EsIr1Ve8t3vNp3Qur8ZfashMQpSZFuM/exec';
 const STORAGE_KEY = 'paliwoPfState';
+
+/* ====================== PIN ====================== */
+const PIN_STORAGE_KEY = 'paliwoPfPin';
+const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
+function getPin(){ return localStorage.getItem(PIN_STORAGE_KEY) || ''; }
+function setPin(p){ localStorage.setItem(PIN_STORAGE_KEY, p); }
+function clearPin(){ localStorage.removeItem(PIN_STORAGE_KEY); }
+function showPinGate(){ document.getElementById('pinGateOverlay').classList.add('open'); document.getElementById('pinGateInput').focus(); }
+function hidePinGate(){ document.getElementById('pinGateOverlay').classList.remove('open'); }
+
+async function submitPinGate(){
+  const pinVal = document.getElementById('pinGateInput').value.trim();
+  if(!pinVal) return;
+  const errEl = document.getElementById('pinGateError');
+  errEl.classList.remove('show');
+  try{
+    const res = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY) + '&pin=' + encodeURIComponent(pinVal));
+    const text = await res.text();
+    if(text === AUTH_FAIL_TEXT){
+      errEl.classList.add('show');
+      return;
+    }
+    setPin(pinVal);
+    hidePinGate();
+    applyRemoteState(text);
+  }catch(e){
+    // Offline — nie da się zweryfikować PIN-u teraz, ale nie ma sensu
+    // trzymać kogoś w terenie bez zasięgu z dala od jego własnych,
+    // lokalnie już zapisanych danych.
+    setPin(pinVal);
+    hidePinGate();
+  }
+}
+
+function applyRemoteState(text){
+  if(!text) return;
+  try{
+    const remote = JSON.parse(text);
+    if(remote && remote.vehicles){
+      state = remote;
+      if(!state.vehicles.find(v=>v.id===activeTab) && !FLEET_TABS.includes(activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
+      setSyncStatus('ok');
+      render();
+    }
+  }catch(e){ /* nieprawidłowa odpowiedź — zostajemy przy danych lokalnych */ }
+}
+
+function openPinChangeSheet(){
+  document.getElementById('pinChangeStep1').style.display='';
+  document.getElementById('pinChangeStep2').style.display='none';
+  document.getElementById('pinChangeError').classList.remove('show');
+  document.getElementById('pinResetCode').value='';
+  document.getElementById('pinResetNew').value='';
+  document.getElementById('pinChangeOverlay').classList.add('open');
+}
+function closePinChangeSheet(){ document.getElementById('pinChangeOverlay').classList.remove('open'); }
+
+async function requestPinResetCode(){
+  if(!GAS_URL){ showToast('Brak konfiguracji serwera', true); return; }
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'request_pin_reset' })
+    });
+    const data = await res.json();
+    if(!data.ok){ showToast(data.error || 'Nie udało się wysłać kodu', true); return; }
+    document.getElementById('pinChangeStep1').style.display='none';
+    document.getElementById('pinChangeStep2').style.display='';
+    showToast('Kod wysłany na e-mail');
+  }catch(e){ showToast('Brak połączenia', true); }
+}
+
+async function confirmPinResetCode(){
+  const code = document.getElementById('pinResetCode').value.trim();
+  const newPin = document.getElementById('pinResetNew').value.trim();
+  const errEl = document.getElementById('pinChangeError');
+  errEl.classList.remove('show');
+  if(!code || !newPin){ errEl.textContent='Wpisz kod i nowy PIN.'; errEl.classList.add('show'); return; }
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'confirm_pin_reset', code, newPin })
+    });
+    const data = await res.json();
+    if(!data.ok){ errEl.textContent = data.error || 'Błąd'; errEl.classList.add('show'); return; }
+    setPin(newPin);
+    closePinChangeSheet();
+    showToast('PIN zmieniony');
+  }catch(e){ errEl.textContent='Brak połączenia'; errEl.classList.add('show'); }
+}
 
 /* ====================== STAN / DANE ====================== */
 function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2)); }
@@ -419,26 +544,33 @@ async function syncRemote(){
     const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: {'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ key: STORAGE_KEY, value: JSON.stringify(state) })
+      body: JSON.stringify({ key: STORAGE_KEY, value: JSON.stringify(state), pin: getPin() })
     });
+    const data = await res.json().catch(()=>null);
+    if(data && data.ok === false){
+      // PIN zmieniony gdzie indziej (np. "Zmień PIN" na innym urządzeniu) —
+      // dane zostają bezpieczne lokalnie, ale trzeba wpisać PIN ponownie.
+      clearPin();
+      setSyncStatus('err');
+      showPinGate();
+      return;
+    }
     if(res.ok) setSyncStatus('ok'); else setSyncStatus('err');
   }catch(e){ setSyncStatus('err'); }
 }
 
 async function loadRemoteOnStart(){
   if(!GAS_URL) return;
+  if(!getPin()){ showPinGate(); return; }
   try{
-    const res = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY));
+    const res = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY) + '&pin=' + encodeURIComponent(getPin()));
     const text = await res.text();
-    if(text){
-      const remote = JSON.parse(text);
-      if(remote && remote.vehicles) {
-        state = remote;
-        if(!state.vehicles.find(v=>v.id===activeTab) && !FLEET_TABS.includes(activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
-        setSyncStatus('ok');
-        render();
-      }
+    if(text === AUTH_FAIL_TEXT){
+      clearPin();
+      showPinGate();
+      return;
     }
+    applyRemoteState(text);
   }catch(e){ /* offline / brak konfiguracji — zostajemy przy danych lokalnych */ }
 }
 
@@ -1270,7 +1402,7 @@ function onPhotoPicked(evt, target){
       const res = await fetch(GAS_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType, dataBase64:base64 }),
+        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType, dataBase64:base64, pin:getPin() }),
         signal: controller.signal
       });
       const json = await res.json();
