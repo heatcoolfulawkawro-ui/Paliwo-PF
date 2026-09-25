@@ -580,6 +580,9 @@ let reorderMode = false;
 function renderTabs(){
   const tabs = document.getElementById('tabs');
   let html = '';
+  if(!reorderMode){
+    html += `<div class="tab ghost ${activeTab==='kalkulator'?'active':''}" onclick="switchTab('kalkulator')">🧮 Koszt 1 km</div>`;
+  }
   state.vehicles.forEach((v,i)=>{
     if(reorderMode){
       html += `
@@ -619,7 +622,8 @@ function switchTab(id){ activeTab = id; render(); }
 const FLEET_TABS = ['flota-firma','flota-prywatna'];
 function renderContent(){
   const el = document.getElementById('content');
-  if(activeTab==='flota-firma') el.innerHTML = renderFleet('firmowe');
+  if(activeTab==='kalkulator') el.innerHTML = renderKalkulator();
+  else if(activeTab==='flota-firma') el.innerHTML = renderFleet('firmowe');
   else if(activeTab==='flota-prywatna') el.innerHTML = renderFleet('prywatne');
   else if(activeTab==='dodaj') el.innerHTML = renderAddVehicle();
   else if(vehicleById(activeTab)) el.innerHTML = renderVehicle(activeTab);
@@ -809,6 +813,76 @@ function shiftFleetMonth(scope, dir){
   let [y,m] = ui.month.split('-').map(Number);
   m += dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
   ui.month = `${y}-${pad(m)}`;
+  renderContent();
+}
+
+// Kalkulator kosztu 1 km -- liczy WYŁĄCZNIE koszt paliwa (fuelCostPer100,
+// bez napraw/OC/innych kosztów -- te user liczy osobno), z dotychczasowych
+// danych każdego auta. Marża % i średni dystans dojazdu są edytowalne i
+// zapisywane w state, żeby przeliczenie było jedno wspólne dla całej floty.
+function renderKalkulator(){
+  const margin = state.calcMargin!=null ? state.calcMargin : 10;
+  const avgDist = state.calcAvgDistance!=null ? state.calcAvgDistance : 30;
+  const factor = 1 + margin/100;
+
+  function scopeBlock(scope, title, icon){
+    const vehicles = state.vehicles.filter(v => (v.type||'firmowe')===scope);
+    let sumDist = 0, sumFuelWeighted = 0;
+    const cards = vehicles.map(v=>{
+      const s = lifetimeSummary(v.id);
+      const hasData = s.fuelCostPer100!=null && s.distance>0;
+      const kmCost = hasData ? s.fuelCostPer100/100 : null;
+      const kmCostMargin = hasData ? kmCost*factor : null;
+      if(hasData){ sumDist += s.distance; sumFuelWeighted += s.fuelCostPer100*s.distance; }
+      return `
+        <div class="fleet-card">
+          <div class="fc-top">
+            <div class="fc-name">🚐 ${esc(v.name)}</div>
+            <span class="cat-pill">${hasData ? n(kmCost,2)+' zł/km' : 'brak danych'}</span>
+          </div>
+          <div class="fc-metrics" style="grid-template-columns:repeat(3,1fr);">
+            <div><div class="fm-label">Paliwo / km</div><div class="fm-value">${hasData?n(kmCost,2)+' zł':'—'}</div></div>
+            <div><div class="fm-label">Z marżą ${n(margin,0)}%</div><div class="fm-value">${hasData?n(kmCostMargin,2)+' zł':'—'}</div></div>
+            <div><div class="fm-label">Dojazd ${n(avgDist,0)} km</div><div class="fm-value">${hasData?n(kmCostMargin*avgDist,0)+' zł':'—'}</div></div>
+          </div>
+        </div>`;
+    }).join('');
+    const avgKmCost = sumDist>0 ? (sumFuelWeighted/sumDist)/100 : null;
+    const avgKmCostMargin = avgKmCost!=null ? avgKmCost*factor : null;
+    return `
+      <div class="section">
+        <div class="section-head"><h2>${icon} ${title}</h2></div>
+        ${vehicles.length===0 ? '<div class="empty-state">Brak pojazdów w tej kategorii</div>' : cards}
+        <div class="fleet-total">
+          <h3>Średnio dla floty (${title.toLowerCase()})</h3>
+          <div class="grid-summary">
+            <div class="tile"><div class="t-label">Paliwo / km</div><div class="t-value">${avgKmCost===null?'—':n(avgKmCost,2)+' zł'}</div></div>
+            <div class="tile"><div class="t-label">Z marżą</div><div class="t-value green">${avgKmCostMargin===null?'—':n(avgKmCostMargin,2)+' zł'}</div></div>
+            <div class="tile"><div class="t-label">Dojazd ${n(avgDist,0)} km</div><div class="t-value">${avgKmCostMargin===null?'—':n(avgKmCostMargin*avgDist,0)+' zł'}</div></div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="section" style="margin-top:14px;">
+      <div class="section-head"><h2>🧮 Koszt 1 km — samo paliwo</h2></div>
+      <div class="add-vehicle-box" style="text-align:left;">
+        Bazowy koszt liczony jest tylko z paliwa (bez napraw, OC itd. — to liczysz osobno w innych zakładkach). Auta bez wystarczających danych pokażą się jako „brak danych" i przeliczą się same, gdy dojdą tankowania. Marża i dystans dojazdu są wspólne dla całej floty i można je zmieniać w dowolnym momencie.
+      </div>
+      <div class="row2" style="margin-top:12px;">
+        <div class="field"><label>Marża (%)</label><input type="number" step="1" value="${margin}" onchange="updateCalcSetting('calcMargin', this.value)"></div>
+        <div class="field"><label>Śr. dystans dojazdu (km)</label><input type="number" step="1" value="${avgDist}" onchange="updateCalcSetting('calcAvgDistance', this.value)"></div>
+      </div>
+    </div>
+    ${scopeBlock('firmowe', 'Firmowe', '🏢')}
+    ${scopeBlock('prywatne', 'Prywatne', '🏠')}
+  `;
+}
+function updateCalcSetting(field, rawVal){
+  const val = Number(String(rawVal).replace(',', '.'));
+  state[field] = isNaN(val) ? 0 : val;
+  saveState();
   renderContent();
 }
 
@@ -1187,7 +1261,12 @@ function onPhotoPicked(evt, target){
       // długo i wygląda jak zawieszenie apki. Pełna, oryginalna jakość
       // zostaje w podglądzie (lightbox) do weryfikacji -- kompresujemy tylko
       // kopię wysyłaną do odczytu.
-      const { base64, mimeType } = await downscaleImage(file, 1600);
+      // Licznik to drobne cyfry na małym wyświetlaczu -- dajemy mu wyższą
+      // rozdzielczość i jakość JPEG niż dystrybutorowi, bo tu kompresja
+      // najbardziej szkodzi czytelności pojedynczych cyfr.
+      const { base64, mimeType } = target==='B'
+        ? await downscaleImage(file, 2000, 0.92)
+        : await downscaleImage(file, 1600, 0.82);
       const res = await fetch(GAS_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -1216,7 +1295,7 @@ function onPhotoPicked(evt, target){
 
 // Pomniejsza zdjęcie do maxDim (dłuższy bok) i koduje jako JPEG -- zmniejsza
 // kilkumegabajtowe zdjęcia z aparatu do kilkuset KB przed wysyłką do Gemini.
-function downscaleImage(file, maxDim){
+function downscaleImage(file, maxDim, quality=0.82){
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -1230,7 +1309,7 @@ function downscaleImage(file, maxDim){
       const canvas = document.createElement('canvas');
       canvas.width = width; canvas.height = height;
       canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      resolve({ base64: canvas.toDataURL('image/jpeg', 0.82).split(',')[1], mimeType: 'image/jpeg' });
+      resolve({ base64: canvas.toDataURL('image/jpeg', quality).split(',')[1], mimeType: 'image/jpeg' });
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Nie udało się wczytać zdjęcia')); };
     img.src = url;

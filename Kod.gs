@@ -53,12 +53,19 @@ function handleOcr(body) {
     return jsonOut({ ok: false, error: 'Brak klucza GEMINI_API_KEY w ustawieniach skryptu (Project Settings -> Script Properties).' });
   }
 
+  // Uwaga dot. "licznik": schemat JSON wymusza natychmiastową odpowiedź bez
+  // miejsca na "przemyślenie" -- dlatego każemy modelowi najpierw przepisać
+  // cyfry pojedynczo do "digitsRead" (odpowiednik chain-of-thought przy
+  // sztywnym JSON), a dopiero potem złożyć to w odometerKm. To wyraźnie
+  // poprawia trafność odczytu wyświetlaczy 7-segmentowych / mechanicznych
+  // bębenków w porównaniu do proszenia od razu o gotową liczbę.
   const prompt = body.mode === 'licznik'
-    ? 'Jesteś asystentem odczytującym przebieg (drogomierz / licznik kilometrów) samochodu ze zdjęcia deski rozdzielczej. ' +
-      'Odczytaj widoczną wartość przebiegu w kilometrach i zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
-      '{"odometerKm": liczba_całkowita_lub_null}. Jeśli przebieg nie jest wyraźnie widoczny, ustaw null.'
-    : 'Jesteś asystentem odczytującym dane ze zdjęcia paragonu za paliwo lub wyświetlacza dystrybutora. ' +
-      'Odczytaj widoczne wartości i zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
+    ? 'Jesteś precyzyjnym asystentem odczytującym przebieg (drogomierz / odometer) samochodu ze zdjęcia zestawu wskaźników. Zdjęcie jest zwykle mocno przybliżone i pokazuje głównie sam wyświetlacz licznika, bez szerszego kontekstu deski rozdzielczej. Wykonaj kolejno: ' +
+      '1) Znajdź licznik CAŁKOWITEGO przebiegu pojazdu (ODO) -- to zwykle największa, najbardziej wyeksponowana liczba na wyświetlaczu, 5-7 cyfr, czasem z jednostką "km" tuż obok. NIE bierz licznika TRASY (TRIP / TRIP A / TRIP B / dzienny) -- to inna, resetowalna wartość, zwykle mniejsza, często z miejscem po przecinku (np. 234.5) i/lub etykietą "trip"/"A"/"B" obok; jeśli widzisz oba liczniki na zdjęciu, wybierz ten BEZ takiej etykiety. ' +
+      '2) Wyświetlacz może być cyfrowym LCD (segmentowym) albo mechanicznym bębenkiem z cyframi na wałkach -- w obu przypadkach czytaj cyfry pojedynczo, od lewej do prawej, zwracając uwagę na cyfry łatwe do pomylenia (3/8, 5/6, 1/7), niedoświetlone/częściowo zasłonięte segmenty oraz na to, że ostatni bębenek/cyfra licznika mechanicznego bywa "w trakcie obrotu" między dwiema wartościami -- w takim wypadku przyjmij cyfrę, która zajmuje większą część pola. ' +
+      '3) Zwróć WYŁĄCZNIE obiekt JSON w formacie: {"digitsRead": "cyfry oddzielone spacją np. 5 0 0 5 8", "odometerKm": liczba_całkowita_lub_null}. Jeśli przebiegu nie da się jednoznacznie odczytać (np. całkowicie zasłonięty, nieostry, brak licznika na zdjęciu), ustaw odometerKm na null zamiast zgadywać wartość.'
+    : 'Jesteś precyzyjnym asystentem odczytującym dane ze zdjęcia paragonu za paliwo lub wyświetlacza dystrybutora. Wyświetlacz dystrybutora to zwykle cyfry LCD/LED -- czytaj je uważnie cyfra po cyfrze, zwracając uwagę na cyfry łatwe do pomylenia (3/8, 5/6, 1/7) i na miejsca po przecinku. ' +
+      'Zwróć WYŁĄCZNIE obiekt JSON w formacie: ' +
       '{"liters": liczba_lub_null, "pricePerLiter": liczba_lub_null, "totalCost": liczba_lub_null}. ' +
       'Jeśli wartość nie jest widoczna na zdjęciu, ustaw null. Liczby zawsze z kropką jako separatorem dziesiętnym, bez jednostek i bez spacji.';
 
