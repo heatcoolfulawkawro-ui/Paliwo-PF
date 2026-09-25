@@ -239,7 +239,7 @@ function paliwoPfShowVersion(v){
 
   .lightbox{position:fixed; inset:0; background:#000; z-index:50; display:none; flex-direction:column; touch-action:none;}
   .lightbox.open{display:flex;}
-  .lightbox-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px; flex:0 0 auto;}
+  .lightbox-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px; flex:0 0 auto; position:relative; z-index:20; background:#000;}
   .lightbox-status{display:flex; align-items:center; gap:8px; color:var(--ink-dim); font-size:.8rem; min-width:0;}
   .lightbox-close{background:var(--panel2); border:1px solid var(--line); color:var(--ink); font-weight:700; padding:9px 16px; border-radius:999px; font-size:.85rem; cursor:pointer; flex:0 0 auto;}
   .lightbox-stage{position:relative; flex:1; overflow:hidden; cursor:grab;}
@@ -1179,15 +1179,19 @@ function onPhotoPicked(evt, target){
   ocrControllers[target] = controller;
   const giveUpTimer = setTimeout(()=>controller.abort('timeout'), 30000);
 
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const dataUrl = reader.result;
-    const base64 = dataUrl.split(',')[1];
+  (async () => {
     try{
+      // Zdjęcia z aparatu telefonu bywają wielkie (kilka MB) -- zanim wyślemy
+      // do odczytu, pomniejszamy je do rozsądnego rozmiaru po stronie
+      // przeglądarki. Bez tego wysyłka na wolnym łączu potrafi trwać bardzo
+      // długo i wygląda jak zawieszenie apki. Pełna, oryginalna jakość
+      // zostaje w podglądzie (lightbox) do weryfikacji -- kompresujemy tylko
+      // kopię wysyłaną do odczytu.
+      const { base64, mimeType } = await downscaleImage(file, 1600);
       const res = await fetch(GAS_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType:file.type, dataBase64:base64 }),
+        body: JSON.stringify({ action:'ocr', mode: target==='B'?'licznik':'dystrybutor', mimeType, dataBase64:base64 }),
         signal: controller.signal
       });
       const json = await res.json();
@@ -1207,8 +1211,30 @@ function onPhotoPicked(evt, target){
       zoneLabel.textContent = defaultLabel;
       showToast(e.name==='AbortError' ? 'Odczyt trwał zbyt długo — spróbuj ponownie' : 'Błąd połączenia z serwerem odczytu', true);
     }
-  };
-  reader.readAsDataURL(file);
+  })();
+}
+
+// Pomniejsza zdjęcie do maxDim (dłuższy bok) i koduje jako JPEG -- zmniejsza
+// kilkumegabajtowe zdjęcia z aparatu do kilkuset KB przed wysyłką do Gemini.
+function downscaleImage(file, maxDim){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if(width > maxDim || height > maxDim){
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width*scale); height = Math.round(height*scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve({ base64: canvas.toDataURL('image/jpeg', 0.82).split(',')[1], mimeType: 'image/jpeg' });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Nie udało się wczytać zdjęcia')); };
+    img.src = url;
+  });
 }
 
 function applyOcrData(data){
