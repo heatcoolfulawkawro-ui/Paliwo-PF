@@ -42,6 +42,29 @@ function syncPinPush(secret, newPin) {
   return jsonOut({ ok: true });
 }
 
+// Diagnostyka: sprawdza, czy ta appka faktycznie dobija się (POST, nie GET
+// po przekierowaniu) do każdej appki z SIBLING_URLS i czy sekret się zgadza —
+// bez dotykania PIN-u. sync_ping po drugiej stronie tylko potwierdza sekret.
+function syncSelftest() {
+  const secret = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+  if (!secret) return jsonOut({ ok: false, error: 'Brak SYNC_SECRET — najpierw bootstrap' });
+  const results = SIBLING_URLS.map(function (url) {
+    try {
+      const res = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'text/plain',
+        payload: JSON.stringify({ action: 'sync_ping', secret: secret }),
+        muteHttpExceptions: true,
+        followRedirects: true
+      });
+      return { url: url, status: res.getResponseCode(), body: res.getContentText().slice(0, 300) };
+    } catch (e) {
+      return { url: url, error: e.message };
+    }
+  });
+  return jsonOut({ ok: true, results: results });
+}
+
 // Wywoływane PO stronie appki, w której PIN faktycznie się zmienił —
 // rozsyła nowy PIN do sióstr. Najlepszego wysiłku: appka, która akurat nie
 // odpowie, dogoni przy najbliższym auth-fail (pokaże błąd, pójdzie reset mailem).
@@ -87,6 +110,11 @@ function doPost(e) {
   if (body.action === 'confirm_pin_reset') return confirmPinReset(body.code, body.newPin);
   if (body.action === 'sync_pin_push') return syncPinPush(body.secret, body.newPin);
   if (body.action === 'bootstrap_sync_secret') return bootstrapSyncSecret(body.secret);
+  if (body.action === 'sync_selftest') return syncSelftest();
+  if (body.action === 'sync_ping') {
+    const real = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+    return jsonOut({ ok: !!real && String(body.secret) === real });
+  }
 
   if (String(body.pin) !== currentPin()) {
     return jsonOut({ ok: false, error: 'Brak autoryzacji' });
