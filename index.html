@@ -169,6 +169,7 @@ function paliwoPfShowVersion(v){
   .entry-head .left{display:flex; flex-direction:column; gap:2px; min-width:0;}
   .entry-head .date{font-size:.82rem; font-weight:600;}
   .entry-head .odo{font-size:.72rem; color:var(--ink-dim); font-family:var(--font-mono);}
+  .entry-head .days-between{font-size:.65rem; color:var(--red);}
   .entry-head .right{display:flex; align-items:center; gap:10px; flex:0 0 auto;}
   .entry-head .cost{font-family:var(--font-mono); font-weight:600; font-size:.95rem;}
   .entry-head .consumption{font-family:var(--font-mono); font-size:.74rem; padding:2px 7px; border-radius:6px; background:rgba(76,175,125,.12); color:var(--green);}
@@ -641,13 +642,14 @@ function intervalsFor(vehicleId){
     if(i===0) return { fillup:f, distance:null, consumption:null, costPer100:null, totalCostPer100:null, isBaseline:true };
     const prev = fs[i-1];
     const distance = f.odo - prev.odo;
+    const days = daysBetween(prev.date, f.date);
     const consumption = distance>0 ? (f.liters/distance*100) : null;
     const costPer100 = distance>0 ? (f.totalCost/distance*100) : null;
     const inInterval = costs.filter(c=>c.date>prev.date && c.date<=f.date);
     inInterval.forEach(c=>claimed.add(c.id));
     const otherInInterval = inInterval.reduce((s,c)=>s+c.amount,0);
     const totalCostPer100 = distance>0 ? (f.totalCost+otherInInterval)/distance*100 : null;
-    return { fillup:f, distance, consumption, costPer100, totalCostPer100, isBaseline:false };
+    return { fillup:f, distance, days, consumption, costPer100, totalCostPer100, isBaseline:false };
   });
   // Koszty nowsze niż ostatnie tankowanie (np. naprawa zapisana dziś, gdy
   // ostatnie tankowanie było kilka dni temu) nie mieszczą się jeszcze w
@@ -879,7 +881,7 @@ function renderFillupEntry(iv, avg){
   return `
     <div class="entry ${iv.isBaseline?'baseline':''}">
       <div class="entry-head" onclick="this.parentElement.classList.toggle('open')">
-        <div class="left"><span class="date">${iv.isBaseline?'Start · ':''}${fmtDateShort(f.date)}</span><span class="odo mono">${n(f.odo,0)} km${iv.isBaseline?'':' · '+n(iv.distance,0)+' km'}</span></div>
+        <div class="left"><span class="date">${iv.isBaseline?'Start · ':''}${fmtDateShort(f.date)}</span><span class="odo mono">${n(f.odo,0)} km${iv.isBaseline?'':' · '+n(iv.distance,0)+' km'}</span>${iv.isBaseline?'':'<span class="days-between">'+iv.days+' dni od poprzedniego tankowania</span>'}</div>
         <div class="right">${rightExtra}<span class="cost mono">${n(f.totalCost,2)} zł</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2"/></svg></div>
       </div>
       <div class="entry-body">
