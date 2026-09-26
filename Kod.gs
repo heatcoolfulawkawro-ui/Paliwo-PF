@@ -21,7 +21,9 @@ const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
 //      POST-em z action:'bootstrap_sync_secret' — działa tylko raz, dopóki
 //      SYNC_SECRET jest puste).
 const SIBLING_URLS = [
-  'https://script.google.com/macros/s/AKfycbz3-nc9P2jTv3pX2_aiP6Ne7A67QXtZHObP53BU3GNMIjgrThQSJtfaOCnBbGSGSRQI/exec' // Waga PF
+  'https://script.google.com/macros/s/AKfycbz3-nc9P2jTv3pX2_aiP6Ne7A67QXtZHObP53BU3GNMIjgrThQSJtfaOCnBbGSGSRQI/exec', // Waga PF
+  'https://script.google.com/macros/s/AKfycby09rSaJwoPPl6KeFn80xCOTiOzYM4EZyKy5XuJ0pBA28-x051wB9HXg_osSqUrjoHA/exec', // Karta godzin (konto PF)
+  'https://script.google.com/macros/s/AKfycby-n1t8ehXtz9sNEByK-dZbObSAs39RKOovANpGIefLbs2-spAlx1iwdFb9CUK5fVZH/exec' // Wydatki domowe (konto PF)
 ];
 
 function bootstrapSyncSecret(secret) {
@@ -29,6 +31,16 @@ function bootstrapSyncSecret(secret) {
   if (props.getProperty('SYNC_SECRET')) return jsonOut({ ok: false, error: 'Sekret już ustawiony' });
   if (!secret || String(secret).length < 20) return jsonOut({ ok: false, error: 'Za krótki sekret' });
   props.setProperty('SYNC_SECRET', String(secret));
+  return jsonOut({ ok: true });
+}
+
+// Rozszerzenie rodziny appek o kolejnego członka: nadpisuje sekret, gated
+// znajomością aktualnego PIN-u (nie samego sekretu, bo część appek go już ma
+// ustawionego i nie da się go odczytać z powrotem).
+function resetSyncSecret(pin, secret) {
+  if (String(pin) !== currentPin()) return jsonOut({ ok: false, error: 'Brak autoryzacji' });
+  if (!secret || String(secret).length < 20) return jsonOut({ ok: false, error: 'Za krótki sekret' });
+  PropertiesService.getScriptProperties().setProperty('SYNC_SECRET', String(secret));
   return jsonOut({ ok: true });
 }
 
@@ -110,6 +122,7 @@ function doPost(e) {
   if (body.action === 'confirm_pin_reset') return confirmPinReset(body.code, body.newPin);
   if (body.action === 'sync_pin_push') return syncPinPush(body.secret, body.newPin);
   if (body.action === 'bootstrap_sync_secret') return bootstrapSyncSecret(body.secret);
+  if (body.action === 'reset_sync_secret') return resetSyncSecret(body.pin, body.secret);
   if (body.action === 'sync_selftest') return syncSelftest();
   if (body.action === 'sync_ping') {
     const real = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
