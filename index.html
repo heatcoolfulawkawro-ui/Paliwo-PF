@@ -586,6 +586,10 @@ async function syncRemote(){
   }catch(e){ setSyncStatus('err'); }
 }
 
+// Telefon wraca do zasięgu — appka sama dogania zaległy zapis, bez czekania
+// na kolejną ręczną zmianę.
+window.addEventListener('online', syncRemote);
+
 async function loadRemoteOnStart(){
   if(!GAS_URL) return;
   if(!getPin()){ showPinGate(); return; }
