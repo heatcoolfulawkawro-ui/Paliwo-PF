@@ -128,6 +128,23 @@ function doPost(e) {
     const real = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
     return jsonOut({ ok: !!real && String(body.secret) === real });
   }
+  // Tylko odczyt dla siostrzanej appki Wydatki domowe (budżet → Motoryzacja): pojazdy, tankowania, koszty.
+  // Ten sam SYNC_SECRET co sync PIN-u; nic nie zapisuje.
+  if (body.action === 'export_state') {
+    const real = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+    if (!real || String(body.secret) !== real) return jsonOut({ ok: false, error: 'Brak autoryzacji' });
+    const rows = getDataSheet().getDataRange().getValues();
+    let st = {};
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0] === 'paliwoPfState') { try { st = JSON.parse(rows[i][1]); } catch (err) {} break; }
+    }
+    return jsonOut({
+      ok: true,
+      vehicles: (st.vehicles || []).map(function (v) { return { id: v.id, name: v.name, type: v.type || 'firmowe' }; }),
+      fillups: (st.fillups || []).map(function (f) { return { vehicleId: f.vehicleId, date: f.date, totalCost: f.totalCost, liters: f.liters }; }),
+      costs: (st.costs || []).map(function (c) { return { vehicleId: c.vehicleId, date: c.date, category: c.category, amount: c.amount, note: c.note }; })
+    });
+  }
 
   if (String(body.pin) !== currentPin()) {
     return jsonOut({ ok: false, error: 'Brak autoryzacji' });
