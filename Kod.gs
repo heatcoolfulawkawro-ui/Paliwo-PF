@@ -10,6 +10,56 @@ const PIN_RESET_EMAIL = 'heatcoolfulawkawro@gmail.com';
 // nie przyjmie.
 const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
 
+// ---------- Sync PIN-u z siostrzanymi appkami (ten sam PF/admin) ----------
+// Żeby dołożyć kolejną appkę do tej samej "rodziny" jednego kodu:
+//   1) w NOWEJ appce wklej dokładnie ten sam blok kodu (SIBLING_URLS,
+//      bootstrapSyncSecret, syncPinPush, pushPinToSiblings) i dopisz wywołanie
+//      pushPinToSiblings(newPin) na końcu jej confirmPinReset — patrz niżej.
+//   2) do SIBLING_URLS TEJ appki i wszystkich pozostałych już istniejących
+//      dopisz URL nowej appki (i dopisz URL-e istniejących do listy nowej).
+//   3) zbootstrapuj w nowej appce TEN SAM sekret co reszta rodziny (jednym
+//      POST-em z action:'bootstrap_sync_secret' — działa tylko raz, dopóki
+//      SYNC_SECRET jest puste).
+const SIBLING_URLS = [
+  'https://script.google.com/macros/s/AKfycbz3-nc9P2jTv3pX2_aiP6Ne7A67QXtZHObP53BU3GNMIjgrThQSJtfaOCnBbGSGSRQI/exec' // Waga PF
+];
+
+function bootstrapSyncSecret(secret) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SYNC_SECRET')) return jsonOut({ ok: false, error: 'Sekret już ustawiony' });
+  if (!secret || String(secret).length < 20) return jsonOut({ ok: false, error: 'Za krótki sekret' });
+  props.setProperty('SYNC_SECRET', String(secret));
+  return jsonOut({ ok: true });
+}
+
+// Odbiór PIN-u z siostrzanej appki — NIE rozsyła dalej (jeden przeskok,
+// żeby appki nie wołały się w kółko).
+function syncPinPush(secret, newPin) {
+  const real = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+  if (!real || String(secret) !== real) return jsonOut({ ok: false, error: 'Brak autoryzacji' });
+  if (!/^\d{4,12}$/.test(String(newPin))) return jsonOut({ ok: false, error: 'Zły format PIN' });
+  PropertiesService.getScriptProperties().setProperty('APP_PIN', String(newPin));
+  return jsonOut({ ok: true });
+}
+
+// Wywoływane PO stronie appki, w której PIN faktycznie się zmienił —
+// rozsyła nowy PIN do sióstr. Najlepszego wysiłku: appka, która akurat nie
+// odpowie, dogoni przy najbliższym auth-fail (pokaże błąd, pójdzie reset mailem).
+function pushPinToSiblings(newPin) {
+  const secret = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+  if (!secret) return;
+  SIBLING_URLS.forEach(function (url) {
+    try {
+      UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'text/plain',
+        payload: JSON.stringify({ action: 'sync_pin_push', secret: secret, newPin: newPin }),
+        muteHttpExceptions: true
+      });
+    } catch (e) { /* best-effort — patrz komentarz wyżej */ }
+  });
+}
+
 function currentPin() {
   return PropertiesService.getScriptProperties().getProperty('APP_PIN') || PIN_INITIAL;
 }
@@ -35,6 +85,8 @@ function doPost(e) {
 
   if (body.action === 'request_pin_reset') return requestPinReset();
   if (body.action === 'confirm_pin_reset') return confirmPinReset(body.code, body.newPin);
+  if (body.action === 'sync_pin_push') return syncPinPush(body.secret, body.newPin);
+  if (body.action === 'bootstrap_sync_secret') return bootstrapSyncSecret(body.secret);
 
   if (String(body.pin) !== currentPin()) {
     return jsonOut({ ok: false, error: 'Brak autoryzacji' });
@@ -172,5 +224,6 @@ function confirmPinReset(code, newPin) {
   props.setProperty('APP_PIN', String(newPin));
   props.deleteProperty('PIN_RESET_CODE');
   props.deleteProperty('PIN_RESET_EXPIRES');
+  pushPinToSiblings(String(newPin));
   return jsonOut({ ok: true });
 }
