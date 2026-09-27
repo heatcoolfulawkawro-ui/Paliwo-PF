@@ -23,7 +23,8 @@ const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
 const SIBLING_URLS = [
   'https://script.google.com/macros/s/AKfycbz3-nc9P2jTv3pX2_aiP6Ne7A67QXtZHObP53BU3GNMIjgrThQSJtfaOCnBbGSGSRQI/exec', // Waga PF
   'https://script.google.com/macros/s/AKfycby09rSaJwoPPl6KeFn80xCOTiOzYM4EZyKy5XuJ0pBA28-x051wB9HXg_osSqUrjoHA/exec', // Karta godzin (konto PF)
-  'https://script.google.com/macros/s/AKfycby-n1t8ehXtz9sNEByK-dZbObSAs39RKOovANpGIefLbs2-spAlx1iwdFb9CUK5fVZH/exec' // Wydatki domowe (konto PF)
+  'https://script.google.com/macros/s/AKfycby-n1t8ehXtz9sNEByK-dZbObSAs39RKOovANpGIefLbs2-spAlx1iwdFb9CUK5fVZH/exec', // Wydatki domowe (konto PF)
+  'https://script.google.com/macros/s/AKfycbxa7mnwnG-iuFvYKqx4-callLWoLGwXzEHk4p3WnU9TdJ7_agcLWNYafWN6KQmIe__g/exec' // Gotówka PF
 ];
 
 function bootstrapSyncSecret(secret) {
