@@ -604,8 +604,11 @@ async function loadRemoteOnStart(){
       showPinGate();
       return;
     }
+    // Sam dotarliśmy do serwera z dobrym PIN-em — to już sukces, nawet gdy
+    // odpowiedź jest pusta (jeszcze bez zapisanych danych).
+    setSyncStatus('ok');
     applyRemoteState(text);
-  }catch(e){ /* offline / brak konfiguracji — zostajemy przy danych lokalnych */ }
+  }catch(e){ setSyncStatus('local'); /* offline / brak konfiguracji — zostajemy przy danych lokalnych */ }
 }
 
 /* ====================== POMOCNICZE / OBLICZENIA ====================== */
