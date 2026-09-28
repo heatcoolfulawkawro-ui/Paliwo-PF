@@ -20,11 +20,13 @@ const AUTH_FAIL_TEXT = '__BRAK_AUTORYZACJI__';
 //   3) zbootstrapuj w nowej appce TEN SAM sekret co reszta rodziny (jednym
 //      POST-em z action:'bootstrap_sync_secret' — działa tylko raz, dopóki
 //      SYNC_SECRET jest puste).
+// Gotówka PF CELOWO usunięta stąd 28.09.2026 — to appka z jednym wspólnym
+// PIN-em dla 2 osób (PF+ZF), nie "appka Pawła"; zsynchronizowany PIN
+// powodował, że reset PIN-u przez żonę w Gotówce nadpisywał PIN Pawła tu.
 const SIBLING_URLS = [
   'https://script.google.com/macros/s/AKfycbz3-nc9P2jTv3pX2_aiP6Ne7A67QXtZHObP53BU3GNMIjgrThQSJtfaOCnBbGSGSRQI/exec', // Waga PF
   'https://script.google.com/macros/s/AKfycby09rSaJwoPPl6KeFn80xCOTiOzYM4EZyKy5XuJ0pBA28-x051wB9HXg_osSqUrjoHA/exec', // Karta godzin (konto PF)
-  'https://script.google.com/macros/s/AKfycby-n1t8ehXtz9sNEByK-dZbObSAs39RKOovANpGIefLbs2-spAlx1iwdFb9CUK5fVZH/exec', // Wydatki domowe (konto PF)
-  'https://script.google.com/macros/s/AKfycbxa7mnwnG-iuFvYKqx4-callLWoLGwXzEHk4p3WnU9TdJ7_agcLWNYafWN6KQmIe__g/exec' // Gotówka PF
+  'https://script.google.com/macros/s/AKfycby-n1t8ehXtz9sNEByK-dZbObSAs39RKOovANpGIefLbs2-spAlx1iwdFb9CUK5fVZH/exec' // Wydatki domowe (konto PF)
 ];
 
 function bootstrapSyncSecret(secret) {
