@@ -4,10 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <script>
-// Skróty na ekranie głównym telefonu potrafią pokazywać zbuforowaną,
-// starą wersję strony. Ten kod po cichu sprawdza w tle prawdziwą
-// aktualną wersję na serwerze (z pominięciem cache przeglądarki) i
-// odświeża stronę automatycznie, jeśli wykryje nowszą.
 function paliwoPfFormatVersion(raw){
   var d = new Date(raw);
   if(isNaN(d.getTime())) return raw;
@@ -19,22 +15,29 @@ function paliwoPfShowVersion(v){
   var el = document.getElementById('pageVersion');
   if(el) el.textContent = 'wersja strony: ' + paliwoPfFormatVersion(v);
 }
+// Skróty na ekranie głównym telefonu potrafią pokazywać zbuforowaną, starą
+// wersję strony. Porównujemy wersję TEJ strony (document.lastModified) z wersją
+// na serwerze (HEAD bez cache) i przy nowszej przeładowujemy raz. Klucz
+// 'paliwopf_page_version' trzyma stałą wartość, bo stare kopie strony (sprzed 30.09.2026)
+// porównują go z serwerem — dzięki temu same przeskakują na świeżą wersję.
 (function(){
-  var cached = localStorage.getItem('paliwopf_page_version');
-  if(cached) paliwoPfShowVersion(cached);
+  var pageMs = Date.parse(document.lastModified);
+  if(!isNaN(pageMs)) window.__paliwoPfVersion = pageMs;
+  try{ localStorage.setItem('paliwopf_page_version', 'nowy-mechanizm'); }catch(e){}
   try{
     fetch(location.pathname, { method:'HEAD', cache:'no-store' }).then(function(res){
-      var v = res.headers.get('last-modified') || res.headers.get('etag');
-      if(!v) return;
-      var stored = localStorage.getItem('paliwopf_page_version');
-      localStorage.setItem('paliwopf_page_version', v);
-      paliwoPfShowVersion(v);
-      // GitHub Pages każe przeglądarce trzymać stronę w cache przez 10 minut
-      // (Cache-Control: max-age=600) -- zwykłe location.reload() czasem po
-      // prostu pokazuje tę samą, zbuforowaną kopię. Doklejenie unikalnego
-      // parametru do adresu wymusza prawdziwe pobranie z sieci.
-      if(stored && stored !== v) location.replace(location.pathname + '?v=' + Date.now());
+      var serverMs = Date.parse(res.headers.get('last-modified') || '');
+      if(isNaN(serverMs) || isNaN(pageMs) || serverMs - pageMs < 5000) return;
+      var guard = 'paliwopf_page_version_reload_' + serverMs;
+      if(sessionStorage.getItem(guard)) return;
+      sessionStorage.setItem(guard, '1');
+      // Unikalny ?v= wymusza pobranie z sieci (GitHub Pages trzyma cache 10 min);
+      // pozostałe parametry, np. ?pin= z linku w mailu, zostają.
+      var q = new URLSearchParams(location.search); q.set('v', Date.now());
+      location.replace(location.pathname + '?' + q.toString());
     }).catch(function(){});
+    // Odśwież zbuforowaną kopię spod gołego adresu — to ją otwierają skróty i rozdzielacze.
+    fetch(location.pathname, { cache:'reload' }).catch(function(){});
   }catch(e){}
 })();
 </script>
