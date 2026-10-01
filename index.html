@@ -441,7 +441,8 @@ async function submitPinGate(){
     }
     setPin(pinVal);
     hidePinGate();
-    applyRemoteState(text);
+    if(isDirty()) syncRemote(); // najpierw zaległe zmiany z tego telefonu
+    else applyRemoteState(text);
   }catch(e){
     // Offline — nie da się zweryfikować PIN-u teraz, ale nie ma sensu
     // trzymać kogoś w terenie bez zasięgu z dala od jego własnych,
@@ -455,11 +456,13 @@ async function submitPinGate(){
 }
 
 function applyRemoteState(text){
-  if(!text) return;
+  if(!text || isDirty()) return; // lokalna zmiana w trakcie pobierania wygrywa i pójdzie na serwer
   try{
     const remote = JSON.parse(text);
     if(remote && remote.vehicles){
       state = remote;
+      // Bez tego telefon po ponownym otwarciu pokazywał najpierw starą kopię.
+      try{ localStorage.setItem(STORAGE_KEY, text); }catch(e){}
       if(!state.vehicles.find(v=>v.id===activeTab) && !FLEET_TABS.includes(activeTab)) activeTab = state.vehicles[0] ? state.vehicles[0].id : 'flota-firma';
       setSyncStatus('ok');
       render();
@@ -558,8 +561,18 @@ function loadState(){
   return s;
 }
 
+// „Brudny” = na tym telefonie są zmiany, których serwer jeszcze nie ma.
+// Tylko wtedy wolno wysłać cały stan na serwer — inaczej telefon ze starą
+// kopią nadpisałby tankowania wpisane w międzyczasie na innym telefonie.
+const LS_DIRTY = 'paliwoPfDirty';
+let saveSeq = 0;
+function isDirty(){ try{ return localStorage.getItem(LS_DIRTY) === '1'; }catch(e){ return false; } }
+function setDirty(v){ try{ v ? localStorage.setItem(LS_DIRTY, '1') : localStorage.removeItem(LS_DIRTY); }catch(e){} }
+
 function saveState(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  saveSeq++;
+  setDirty(true);
   setSyncStatus('local');
   syncRemote();
 }
@@ -573,6 +586,7 @@ function setSyncStatus(kind){
 
 async function syncRemote(){
   if(!GAS_URL) return;
+  const seq = saveSeq;
   try{
     const res = await fetch(GAS_URL, {
       method: 'POST',
@@ -588,17 +602,25 @@ async function syncRemote(){
       showPinGate();
       return;
     }
+    if(res.ok && data && data.ok === true && seq === saveSeq) setDirty(false); // nowa zmiana w trakcie? zostaje do wysłania
     if(res.ok) setSyncStatus('ok'); else setSyncStatus('err');
   }catch(e){ setSyncStatus('err'); }
 }
 
-// Telefon wraca do zasięgu — appka sama dogania zaległy zapis, bez czekania
-// na kolejną ręczną zmianę.
-window.addEventListener('online', syncRemote);
+// Telefon wraca do zasięgu — wysyłamy tylko zaległe zmiany z tego telefonu
+// (do 01.10.2026 szedł cały stan, także stara kopia bez żadnych zmian).
+window.addEventListener('online', ()=>{ if(isDirty()) syncRemote(); });
+// Powrót do appki — dociągnij świeże dane, chyba że otwarte jest okno
+// (edycja tankowania/kosztu, PIN): wpis mógłby zniknąć spod formularza.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden || document.querySelector('.overlay.open')) return;
+  loadRemoteOnStart();
+});
 
 async function loadRemoteOnStart(){
   if(!GAS_URL) return;
   if(!getPin()){ showPinGate(); return; }
+  if(isDirty()) return syncRemote(); // najpierw oddaj serwerowi zmiany zrobione offline
   try{
     const res = await fetch(GAS_URL + '?key=' + encodeURIComponent(STORAGE_KEY) + '&pin=' + encodeURIComponent(getPin()));
     const text = await res.text();
